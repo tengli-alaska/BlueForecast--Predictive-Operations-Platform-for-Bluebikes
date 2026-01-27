@@ -2,7 +2,6 @@
 
 **Predictive Operations Platform for Bluebikes**
 
-[![CI/CD](https://github.com/tengli-alaska/bluebikes-demand-predictor/actions/workflows/tests.yml/badge.svg)](https://github.com/tengli-alaska/bluebikes-demand-predictor/actions)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
 ---
