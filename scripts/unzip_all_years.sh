@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Unzip ALL years of Bluebikes data
+# Unzip ALL years of Bluebikes data (Mac-compatible, no parallel processing)
 # Usage: bash scripts/unzip_all_years.sh
 # Or specify years: bash scripts/unzip_all_years.sh 2023 2024
 
@@ -32,58 +32,61 @@ CURRENT=0
 
 for YEAR in "${YEARS[@]}"; do
     CURRENT=$((CURRENT + 1))
-    
+
     echo -e "${GREEN}[${CURRENT}/${TOTAL_YEARS}] Processing year: ${YEAR}${NC}"
-    
+
     INPUT_PATH="gs://${BUCKET}/raw/historical/${YEAR}/"
     OUTPUT_PATH="gs://${BUCKET}/raw/historical/${YEAR}/csv/"
-    
+
     # Check if CSV files already exist
     CSV_EXISTS=$(gsutil ls "${OUTPUT_PATH}*.csv" 2>/dev/null | wc -l || echo 0)
-    
+
     if [ "$CSV_EXISTS" -gt 0 ]; then
         echo -e "${YELLOW}  ⚠ CSV files already exist for ${YEAR}. Skipping...${NC}"
         continue
     fi
-    
+
     # Create temp directory
     TEMP_DIR="/tmp/bluebikes_${YEAR}_$$"
     mkdir -p ${TEMP_DIR}
-    
-    # Download ZIP files
+
+    # Download ZIP files (NO -m flag)
     echo -e "${YELLOW}  Downloading ZIP files...${NC}"
-    ZIP_COUNT=$(gsutil -m cp "${INPUT_PATH}*.zip" ${TEMP_DIR}/ 2>/dev/null | grep -c "Copying" || echo 0)
-    
+    gsutil cp "${INPUT_PATH}*.zip" ${TEMP_DIR}/
+
+    ZIP_COUNT=$(ls ${TEMP_DIR}/*.zip 2>/dev/null | wc -l || echo 0)
+
     if [ "$ZIP_COUNT" -eq 0 ]; then
         echo -e "${RED}  ✗ No ZIP files found for ${YEAR}${NC}"
         rm -rf ${TEMP_DIR}
         continue
     fi
-    
+
     echo -e "${GREEN}  ✓ Downloaded ${ZIP_COUNT} files${NC}"
-    
-    # Unzip
+
+    # Unzip (with progress)
     echo -e "${YELLOW}  Unzipping...${NC}"
     cd ${TEMP_DIR}
     for file in *.zip; do
         if [ -f "$file" ]; then
-            unzip -q -o "$file"
+            echo -e "    Extracting: ${file}"
+            unzip -o "$file" > /dev/null
             rm "$file"
         fi
     done
-    
-    CSV_COUNT=$(ls *.csv 2>/dev/null | wc -l)
+
+    CSV_COUNT=$(ls *.csv 2>/dev/null | wc -l || echo 0)
     echo -e "${GREEN}  ✓ Extracted ${CSV_COUNT} CSV files${NC}"
-    
-    # Upload to GCS
+
+    # Upload to GCS (NO -m flag)
     echo -e "${YELLOW}  Uploading to GCS...${NC}"
-    gsutil -m cp *.csv "${OUTPUT_PATH}"
+    gsutil cp *.csv "${OUTPUT_PATH}"
     echo -e "${GREEN}  ✓ Uploaded to ${OUTPUT_PATH}${NC}"
-    
+
     # Cleanup
     cd -
     rm -rf ${TEMP_DIR}
-    
+
     echo ""
 done
 
