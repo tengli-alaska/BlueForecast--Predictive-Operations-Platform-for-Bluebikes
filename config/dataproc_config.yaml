@@ -1,0 +1,48 @@
+# Dataproc Cluster Configuration
+cluster:
+  name: bluebikes-processing-cluster
+  region: us-east1
+
+  # Master node (like Glue job driver)
+  master:
+    machine_type: n1-standard-4  # 4 vCPUs, 15 GB RAM
+    disk_size: 100  # GB
+
+  # Worker nodes (for parallel processing)
+  worker:
+    machine_type: n1-standard-4  # 4 vCPUs, 15 GB RAM
+    disk_size: 100  # GB
+    num_instances: 2  # 2 workers for parallel processing
+
+  # Auto-scaling (optional - can scale up/down based on load)
+  autoscaling:
+    enabled: false  # Start with fixed size, enable later if needed
+
+  # Idle deletion (saves money - cluster auto-deletes after idle time)
+  idle_delete_ttl: 3600s  # Delete after 1 hour of inactivity
+
+  # Software configuration
+  software:
+    image_version: 2.1-debian11  # Includes Spark 3.3
+
+  # GCS bucket for staging
+  staging_bucket: bluebikes-demand-predictor-data
+  temp_bucket: bluebikes-demand-predictor-data
+
+# Job configuration
+job:
+  main_python_file: jobs/process_historical.py
+  args:
+    - --input=gs://bluebikes-demand-predictor-data/raw/historical/
+    - --output=gs://bluebikes-demand-predictor-data/processed/cleaned/
+
+  # JAR files (if needed)
+  jars: []
+
+  # Python files (additional modules)
+  py_files: []
+
+  # Properties for Spark
+  properties:
+    spark.executor.memory: 4g
+    spark.driver.memory: 4g

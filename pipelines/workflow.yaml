@@ -1,0 +1,189 @@
+main:
+  steps:
+    - init:
+        assign:
+          - project_id: "bluebikes-demand-predictor"
+          - region: "us-east1"
+          - bucket: "bluebikes-demand-predictor-data"
+          - service_account: "data-pipeline-sa@bluebikes-demand-predictor.iam.gserviceaccount.com"
+
+    - submit_cleaning_job:
+        call: http.post
+        args:
+          url: ${"https://dataproc.googleapis.com/v1/projects/" + project_id + "/locations/" + region + "/batches"}
+          auth:
+            type: OAuth2
+          body:
+            pysparkBatch:
+              mainPythonFileUri: ${"gs://" + bucket + "/jobs/production_cleaning_pipeline.py"}
+              args:
+                - "--all"
+                - "--bucket"
+                - ${bucket}
+            runtimeConfig:
+              version: "2.2"
+              properties:
+                spark.driver.memory: "4g"
+                spark.executor.memory: "4g"
+            environmentConfig:
+              executionConfig:
+                serviceAccount: ${service_account}
+        result: cleaning_response
+
+    - get_cleaning_operation:
+        assign:
+          - cleaning_op_url: ${cleaning_response.body.name}
+
+    - wait_for_cleaning:
+        call: http.get
+        args:
+          url: ${"https://dataproc.googleapis.com/v1/" + cleaning_op_url}
+          auth:
+            type: OAuth2
+        result: cleaning_status
+
+    - check_cleaning_done:
+        switch:
+          - condition: ${cleaning_status.body.done == true}
+            next: verify_cleaning_success
+        next: sleep_cleaning
+
+    - sleep_cleaning:
+        call: sys.sleep
+        args:
+          seconds: 30
+        next: wait_for_cleaning
+
+    - verify_cleaning_success:
+        switch:
+          - condition: ${"error" in cleaning_status.body}
+            raise: ${"Cleaning pipeline failed"}
+        next: log_cleaning_done
+
+    - log_cleaning_done:
+        call: sys.log
+        args:
+          text: "Step 1 Complete - Data cleaning finished"
+          severity: INFO
+
+    - submit_aggregation_job:
+        call: http.post
+        args:
+          url: ${"https://dataproc.googleapis.com/v1/projects/" + project_id + "/locations/" + region + "/batches"}
+          auth:
+            type: OAuth2
+          body:
+            pysparkBatch:
+              mainPythonFileUri: ${"gs://" + bucket + "/jobs/production_demand_aggregation.py"}
+              args:
+                - "--all"
+                - "--bucket"
+                - ${bucket}
+            runtimeConfig:
+              version: "2.2"
+              properties:
+                spark.driver.memory: "4g"
+                spark.executor.memory: "4g"
+            environmentConfig:
+              executionConfig:
+                serviceAccount: ${service_account}
+        result: aggregation_response
+
+    - get_aggregation_operation:
+        assign:
+          - aggregation_op_url: ${aggregation_response.body.name}
+
+    - wait_for_aggregation:
+        call: http.get
+        args:
+          url: ${"https://dataproc.googleapis.com/v1/" + aggregation_op_url}
+          auth:
+            type: OAuth2
+        result: aggregation_status
+
+    - check_aggregation_done:
+        switch:
+          - condition: ${aggregation_status.body.done == true}
+            next: verify_aggregation_success
+        next: sleep_aggregation
+
+    - sleep_aggregation:
+        call: sys.sleep
+        args:
+          seconds: 30
+        next: wait_for_aggregation
+
+    - verify_aggregation_success:
+        switch:
+          - condition: ${"error" in aggregation_status.body}
+            raise: ${"Aggregation pipeline failed"}
+        next: log_aggregation_done
+
+    - log_aggregation_done:
+        call: sys.log
+        args:
+          text: "Step 2 Complete - Demand aggregation finished"
+          severity: INFO
+
+    - submit_feature_job:
+        call: http.post
+        args:
+          url: ${"https://dataproc.googleapis.com/v1/projects/" + project_id + "/locations/" + region + "/batches"}
+          auth:
+            type: OAuth2
+          body:
+            pysparkBatch:
+              mainPythonFileUri: ${"gs://" + bucket + "/jobs/production_feature_engineering.py"}
+              args:
+                - "--bucket"
+                - ${bucket}
+            runtimeConfig:
+              version: "2.2"
+              properties:
+                spark.driver.memory: "4g"
+                spark.executor.memory: "8g"
+            environmentConfig:
+              executionConfig:
+                serviceAccount: ${service_account}
+        result: feature_response
+
+    - get_feature_operation:
+        assign:
+          - feature_op_url: ${feature_response.body.name}
+
+    - wait_for_features:
+        call: http.get
+        args:
+          url: ${"https://dataproc.googleapis.com/v1/" + feature_op_url}
+          auth:
+            type: OAuth2
+        result: feature_status
+
+    - check_feature_done:
+        switch:
+          - condition: ${feature_status.body.done == true}
+            next: verify_feature_success
+        next: sleep_feature
+
+    - sleep_feature:
+        call: sys.sleep
+        args:
+          seconds: 30
+        next: wait_for_features
+
+    - verify_feature_success:
+        switch:
+          - condition: ${"error" in feature_status.body}
+            raise: ${"Feature pipeline failed"}
+        next: log_feature_done
+
+    - log_feature_done:
+        call: sys.log
+        args:
+          text: "Step 3 Complete - Feature engineering finished"
+          severity: INFO
+
+    - pipeline_success:
+        return:
+          status: "SUCCESS"
+          message: "BlueForecast data pipeline completed successfully"
