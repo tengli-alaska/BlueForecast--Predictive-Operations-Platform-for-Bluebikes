@@ -1,0 +1,12 @@
+FROM apache/airflow:2.9.3
+
+USER airflow
+
+RUN pip install --no-cache-dir \
+    apache-airflow-providers-google==10.3.0 \
+    apache-airflow-providers-apache-spark==4.3.0 \
+    google-cloud-storage==2.14.0 \
+    google-cloud-dataproc==5.8.0 \
+    pandas==2.1.4 \
+    pyarrow==14.0.2 \
+    pyspark==3.5.1

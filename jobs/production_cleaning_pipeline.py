@@ -1,395 +1,200 @@
 #!/usr/bin/env python3
-"""
-Bluebikes Data Cleaning Pipeline - Production Version
-
-This script provides automated data cleaning for Bluebikes trip data.
-It reads raw CSV files from local filesystem or Google Cloud Storage,
-applies cleaning transformations, and saves the processed data as Parquet format.
-
-The pipeline supports both local development mode and production GCS mode.
-It can be triggered manually or scheduled via Cloud Scheduler for automated
-processing of new data.
-
-Usage:
-    Local mode (development):
-        python jobs/production_cleaning_pipeline.py --year 2024 --local
-        python jobs/production_cleaning_pipeline.py --all --local
-
-    GCS mode (production - requires Dataproc or GCS connector):
-        python jobs/production_cleaning_pipeline.py --year 2024
-        python jobs/production_cleaning_pipeline.py --all
-
-Author: Data Engineering Team
-Project: Bluebikes Demand Prediction
-"""
 
 import argparse
-import sys
-import os
 import logging
+import subprocess
+from datetime import datetime
+from typing import List
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, unix_timestamp, lower, trim,
-    hour, dayofweek, month, year
+    hour, dayofweek, month, year, to_timestamp
 )
-from datetime import datetime
+from pyspark.sql.types import (
+    StructType, StructField, StringType, DoubleType,
+    IntegerType, TimestampType
+)
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
+GCS_BUCKET           = "bluebikes-demand-predictor-data"
+RAW_TRIPS_BASE       = "raw_enforced/trips"
+PROCESSED_CLEAN_BASE = "cleaned/trips"
+
+TRIP_SCHEMA = StructType([
+    StructField("ride_id",             StringType(),    True),
+    StructField("rideable_type",       StringType(),    True),
+    StructField("started_at",          StringType(),    True),
+    StructField("ended_at",            StringType(),    True),
+    StructField("start_station_name",  StringType(),    True),
+    StructField("start_station_id",    StringType(),    True),
+    StructField("end_station_name",    StringType(),    True),
+    StructField("end_station_id",      StringType(),    True),
+    StructField("start_lat",           DoubleType(),    True),
+    StructField("start_lng",           DoubleType(),    True),
+    StructField("end_lat",             DoubleType(),    True),
+    StructField("end_lng",             DoubleType(),    True),
+    StructField("member_casual",       StringType(),    True),
+    StructField("started_at_ts",       TimestampType(), True),
+    StructField("ended_at_ts",         TimestampType(), True),
+])
+
+
+def gcs_path_exists(path):
+    result = subprocess.run(
+        ["gsutil", "-q", "stat", path],
+        capture_output=True
+    )
+    return result.returncode == 0
+
+
+def month_range(start_yyyymm: str, end_yyyymm: str) -> List[str]:
+    sy, sm = int(start_yyyymm[:4]), int(start_yyyymm[4:])
+    ey, em = int(end_yyyymm[:4]), int(end_yyyymm[4:])
+    months = []
+    y, m = sy, sm
+    while (y, m) <= (ey, em):
+        months.append(f"{y:04d}{m:02d}")
+        m += 1
+        if m == 13:
+            m = 1
+            y += 1
+    return months
+
 
 class BluebikesCleaningPipeline:
-    """
-    Production data cleaning pipeline for Bluebikes trip data.
 
-    This class implements the complete ETL process for cleaning
-    historical trip data and preparing it for machine learning models.
-
-    Supports both local filesystem and Google Cloud Storage backends.
-    """
-
-    def __init__(self, gcs_bucket="bluebikes-demand-predictor-data", local_mode=False):
-        """
-        Initialize the cleaning pipeline.
-
-        Args:
-            gcs_bucket (str): Name of the GCS bucket containing data
-            local_mode (bool): If True, use local filesystem; if False, use GCS
-        """
-        self.gcs_bucket = gcs_bucket
-        self.local_mode = local_mode
-        self.spark = None
-
-        if local_mode:
-            logger.info("Pipeline initialized in LOCAL mode (development)")
-        else:
-            logger.info(f"Pipeline initialized in GCS mode with bucket: {gcs_bucket}")
+    def __init__(self, bucket: str, mode: str, start_yyyymm: str,
+                 end_yyyymm: str, run_id: str, force: bool = False):
+        self.bucket       = bucket
+        self.mode         = mode
+        self.start_yyyymm = start_yyyymm
+        self.end_yyyymm   = end_yyyymm
+        self.run_id       = run_id
+        self.force        = force
+        self.spark        = None
 
     def create_spark_session(self):
-        """Initialize Apache Spark session with appropriate configuration."""
-        logger.info("Initializing Spark session")
-
-        builder = SparkSession.builder \
-            .appName("Bluebikes Production Cleaning Pipeline") \
-            .config("spark.driver.memory", "4g") \
-            .config("spark.sql.shuffle.partitions", "8")
-
-        # Add GCS connector configuration if not in local mode
-        if not self.local_mode:
-            builder = builder \
-                .config("spark.hadoop.fs.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem") \
-                .config("spark.hadoop.fs.AbstractFileSystem.gs.impl", "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS")
-
-        self.spark = builder.getOrCreate()
-
+        self.spark = (
+            SparkSession.builder
+            .appName(f"BluebikesCleaning-{self.run_id}")
+            .config("spark.driver.memory", "4g")
+            .config("spark.sql.shuffle.partitions", "16")
+            .getOrCreate()
+        )
         self.spark.sparkContext.setLogLevel("WARN")
-        logger.info(f"Spark {self.spark.version} initialized successfully")
 
-    def read_data(self, year, month=None):
-        """
-        Read raw trip data from local filesystem or Google Cloud Storage.
+    def raw_path(self, yyyymm):
+        y = yyyymm[:4]
+        m = str(int(yyyymm[4:]))  # strip leading zero: 01 -> 1
+        return f"gs://{self.bucket}/{RAW_TRIPS_BASE}/year={y}/month={m}/"
 
-        Args:
-            year (int): Year to process
-            month (str, optional): Specific month to process (format: "04")
+    def output_path(self, yyyymm):
+        y = yyyymm[:4]
+        m = yyyymm[4:]
+        return f"gs://{self.bucket}/{PROCESSED_CLEAN_BASE}/year={y}/month={m}"
 
-        Returns:
-            pyspark.sql.DataFrame: Raw trip data
-        """
-        if self.local_mode:
-            # Local file paths
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    def already_processed(self, yyyymm):
+        success_file = f"{self.output_path(yyyymm)}/_SUCCESS"
+        return gcs_path_exists(success_file)
 
-            if month:
-                path = os.path.join(base_dir, f"data/raw/{year}/{year}{month}-bluebikes-tripdata.csv")
-                logger.info(f"Reading {year}-{month} from local filesystem")
-            else:
-                path = os.path.join(base_dir, f"data/raw/{year}/*.csv")
-                logger.info(f"Reading all {year} data from local filesystem")
-        else:
-            # GCS paths
-            if month:
-                path = f"gs://{self.gcs_bucket}/raw/historical/{year}/csv/{year}{month}-bluebikes-tripdata.csv"
-                logger.info(f"Reading {year}-{month} from GCS")
-            else:
-                path = f"gs://{self.gcs_bucket}/raw/historical/{year}/csv/*.csv"
-                logger.info(f"Reading all {year} data from GCS")
+    def clean_df(self, df):
+        df = df.dropDuplicates(["ride_id"])
 
-        df = self.spark.read.csv(path, header=True, inferSchema=True)
+        df = df.withColumn("started_at", to_timestamp(col("started_at"))) \
+               .withColumn("ended_at",   to_timestamp(col("ended_at")))
 
-        record_count = df.count()
-        logger.info(f"Loaded {record_count:,} records")
+        df = df.withColumn(
+            "trip_duration_seconds",
+            unix_timestamp("ended_at") - unix_timestamp("started_at")
+        ).withColumn(
+            "trip_duration_minutes",
+            col("trip_duration_seconds") / 60
+        )
+
+        df = df.filter(
+            col("ride_id").isNotNull() &
+            col("started_at").isNotNull() &
+            col("ended_at").isNotNull() &
+            col("start_station_id").isNotNull() &
+            col("end_station_id").isNotNull()
+        )
+
+        df = df.filter(
+            (col("trip_duration_seconds") >= 60) &
+            (col("trip_duration_seconds") <= 86400)
+        )
+
+        df = df.withColumn("rideable_type",  lower(trim(col("rideable_type")))) \
+               .withColumn("member_casual",  lower(trim(col("member_casual"))))
+
+        df = df.withColumn("start_hour",        hour(col("started_at"))) \
+               .withColumn("start_day_of_week", dayofweek(col("started_at"))) \
+               .withColumn("start_month",       month(col("started_at"))) \
+               .withColumn("start_year",        year(col("started_at"))) \
+               .withColumn("start_date",        col("started_at").cast("date"))
 
         return df
 
-    def clean_data(self, df, label="Data"):
-        """
-        Apply data cleaning transformations.
-
-        Cleaning operations:
-        1. Remove duplicate records by ride_id
-        2. Calculate trip duration in seconds and minutes
-        3. Remove records with missing critical fields
-        4. Filter duration outliers (less than 1 minute or greater than 24 hours)
-        5. Standardize text fields (lowercase, trim whitespace)
-        6. Extract time-based features (hour, day of week, month, year)
-
-        Args:
-            df (pyspark.sql.DataFrame): Raw input data
-            label (str): Identifier for logging purposes
-
-        Returns:
-            pyspark.sql.DataFrame: Cleaned data
-        """
-
-        logger.info(f"Starting data cleaning for {label}")
-
-        initial_count = df.count()
-        logger.info(f"Initial record count: {initial_count:,}")
-
-        # Step 1: Remove duplicates
-        logger.info("Step 1: Removing duplicate records")
-        before_dedup = df.count()
-        df = df.dropDuplicates(['ride_id'])
-        duplicates_removed = before_dedup - df.count()
-        logger.info(f"Removed {duplicates_removed:,} duplicate records")
-
-        # Step 2: Calculate trip duration
-        logger.info("Step 2: Calculating trip duration")
-        df = df.withColumn(
-            'trip_duration_seconds',
-            unix_timestamp('ended_at') - unix_timestamp('started_at')
-        )
-        df = df.withColumn(
-            'trip_duration_minutes',
-            col('trip_duration_seconds') / 60
-        )
-        logger.info("Trip duration calculated")
-
-        # Step 3: Remove rows with missing critical fields
-        logger.info("Step 3: Filtering records with missing critical fields")
-        before_null_filter = df.count()
-        df = df.filter(
-            col('ride_id').isNotNull() &
-            col('started_at').isNotNull() &
-            col('ended_at').isNotNull() &
-            col('start_station_id').isNotNull() &
-            col('end_station_id').isNotNull()
-        )
-        null_removed = before_null_filter - df.count()
-        logger.info(f"Removed {null_removed:,} records with missing data")
-
-        # Step 4: Filter duration outliers
-        logger.info("Step 4: Filtering duration outliers")
-        before_outlier_filter = df.count()
-        df = df.filter(
-            (col('trip_duration_seconds') >= 60) &
-            (col('trip_duration_seconds') <= 86400)
-        )
-        outliers_removed = before_outlier_filter - df.count()
-        logger.info(f"Removed {outliers_removed:,} outlier records (duration < 1min or > 24h)")
-
-        # Step 5: Standardize text fields
-        logger.info("Step 5: Standardizing text fields")
-        df = df.withColumn('rideable_type', lower(trim(col('rideable_type'))))
-        df = df.withColumn('member_casual', lower(trim(col('member_casual'))))
-        logger.info("Text fields standardized")
-
-        # Step 6: Add time-based features
-        logger.info("Step 6: Extracting time-based features")
-        df = df.withColumn('start_hour', hour(col('started_at')))
-        df = df.withColumn('start_day_of_week', dayofweek(col('started_at')))
-        df = df.withColumn('start_month', month(col('started_at')))
-        df = df.withColumn('start_year', year(col('started_at')))
-        df = df.withColumn('start_date', col('started_at').cast('date'))
-        logger.info("Time features extracted")
-
-        # Final summary
-        final_count = df.count()
-        total_removed = initial_count - final_count
-        retention_rate = (final_count / initial_count) * 100
-
-        logger.info("="*60)
-        logger.info(f"Cleaning complete for {label}")
-        logger.info(f"Initial records: {initial_count:,}")
-        logger.info(f"Final records: {final_count:,}")
-        logger.info(f"Total removed: {total_removed:,} ({100-retention_rate:.2f}%)")
-        logger.info(f"Retention rate: {retention_rate:.2f}%")
-        logger.info("="*60)
-
-        return df
-
-    def save_data(self, df, year, month=None):
-        """
-        Save cleaned data to local filesystem or GCS in Parquet format.
-
-        Args:
-            df (pyspark.sql.DataFrame): Cleaned data to save
-            year (int): Year identifier
-            month (str, optional): Month identifier
-        """
-        if self.local_mode:
-            # Local paths
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-            if month:
-                output_path = os.path.join(base_dir, f"data/processed/cleaned/year={year}/month={month}")
-                label = f"{year}-{month}"
-            else:
-                output_path = os.path.join(base_dir, f"data/processed/cleaned/year={year}")
-                label = str(year)
-
-            logger.info(f"Saving {label} to local filesystem: {output_path}")
-        else:
-            # GCS paths
-            if month:
-                output_path = f"gs://{self.gcs_bucket}/processed/cleaned/year={year}/month={month}"
-                label = f"{year}-{month}"
-            else:
-                output_path = f"gs://{self.gcs_bucket}/processed/cleaned/year={year}"
-                label = str(year)
-
-            logger.info(f"Saving {label} to GCS: {output_path}")
-
-        df.write.mode("overwrite").parquet(output_path)
-
-        logger.info(f"Successfully saved {label}")
-
-    def run(self, year=None, month=None, process_all=False):
-        """
-        Execute the complete cleaning pipeline.
-
-        Args:
-            year (int, optional): Year to process
-            month (str, optional): Specific month to process
-            process_all (bool): If True, process all available years
-        """
-
-        logger.info("="*80)
-        logger.info("BLUEBIKES DATA CLEANING PIPELINE - STARTED")
-        logger.info("="*80)
-
-        start_time = datetime.now()
-
+    def run(self):
+        print(f"[START] cleaning_job | mode={self.mode} | run_id={self.run_id}")
         self.create_spark_session()
 
-        try:
-            if process_all:
-                # Process multiple years
-                years_to_process = [2023, 2024]
-                logger.info(f"Processing all years: {years_to_process}")
+        months = [self.end_yyyymm] if self.mode == "incremental" \
+                 else month_range(self.start_yyyymm, self.end_yyyymm)
 
-                for yr in years_to_process:
-                    try:
-                        df_raw = self.read_data(yr)
-                        df_clean = self.clean_data(df_raw, label=str(yr))
-                        self.save_data(df_clean, yr)
+        logger.info(f"Processing months: {months}")
 
-                    except Exception as e:
-                        logger.error(f"Error processing year {yr}: {str(e)}")
-                        continue
+        total_rows    = 0
+        skipped       = 0
+        processed     = 0
 
-            else:
-                # Process single year or month
-                label = f"{year}-{month}" if month else str(year)
-                logger.info(f"Processing: {label}")
+        for yyyymm in months:
+            # ── Skip if already processed and not forcing ─────────────────
+            if not self.force and self.already_processed(yyyymm):
+                logger.info(f"[SKIP] month={yyyymm} already exists | use --force to reprocess")
+                skipped += 1
+                continue
 
-                df_raw = self.read_data(year, month)
-                df_clean = self.clean_data(df_raw, label=label)
-                self.save_data(df_clean, year, month)
+            input_path  = self.raw_path(yyyymm)
+            output_path = self.output_path(yyyymm)
+            logger.info(f"[START] month={yyyymm} | input={input_path}")
 
-            # Calculate total runtime
-            end_time = datetime.now()
-            runtime = (end_time - start_time).total_seconds()
+            df       = self.spark.read.schema(TRIP_SCHEMA).parquet(input_path)
+            df_clean = self.clean_df(df)
 
-            logger.info("="*80)
-            logger.info("PIPELINE COMPLETED SUCCESSFULLY")
-            logger.info(f"Total runtime: {runtime:.2f} seconds ({runtime/60:.2f} minutes)")
-            logger.info("="*80)
+            df_clean.write.mode("overwrite").parquet(output_path)
+            count      = df_clean.count()
+            total_rows += count
+            processed  += 1
+            logger.info(f"[END] month={yyyymm} | output={output_path} | rows={count}")
 
-        except Exception as e:
-            logger.error(f"Pipeline failed: {str(e)}")
-            raise
-
-        finally:
-            if self.spark:
-                self.spark.stop()
-                logger.info("Spark session terminated")
+        self.spark.stop()
+        print(f"[END] cleaning_job | processed={processed} | skipped={skipped} | rows_written={total_rows} | status=OK")
 
 
 def main():
-    """Command-line interface for the cleaning pipeline."""
-
-    parser = argparse.ArgumentParser(
-        description='Bluebikes Production Data Cleaning Pipeline',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  Local mode (development):
-    python jobs/production_cleaning_pipeline.py --year 2024 --local
-    python jobs/production_cleaning_pipeline.py --all --local
-
-  GCS mode (production):
-    python jobs/production_cleaning_pipeline.py --year 2024
-    python jobs/production_cleaning_pipeline.py --all
-
-  Process specific month:
-    python jobs/production_cleaning_pipeline.py --year 2024 --month 04 --local
-        """
-    )
-
-    parser.add_argument(
-        '--year',
-        type=int,
-        help='Year to process (e.g., 2024)'
-    )
-
-    parser.add_argument(
-        '--month',
-        type=str,
-        help='Specific month to process (e.g., "04" for April)'
-    )
-
-    parser.add_argument(
-        '--all',
-        action='store_true',
-        help='Process all available years (2023, 2024)'
-    )
-
-    parser.add_argument(
-        '--local',
-        action='store_true',
-        help='Use local filesystem instead of GCS (for development)'
-    )
-
-    parser.add_argument(
-        '--bucket',
-        type=str,
-        default='bluebikes-demand-predictor-data',
-        help='GCS bucket name (default: bluebikes-demand-predictor-data)'
-    )
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode",         required=True, choices=["incremental", "backfill", "demo"])
+    parser.add_argument("--start_yyyymm")
+    parser.add_argument("--end_yyyymm",   required=True)
+    parser.add_argument("--bucket",       default=GCS_BUCKET)
+    parser.add_argument("--run_id",       default=datetime.utcnow().strftime("%Y%m%dT%H%M%S"))
+    parser.add_argument("--force",        action="store_true", help="Reprocess even if output exists")
     args = parser.parse_args()
 
-    # Validate arguments
-    if not args.all and not args.year:
-        parser.error("Must specify either --year or --all")
-
-    # Execute pipeline
-    pipeline = BluebikesCleaningPipeline(
-        gcs_bucket=args.bucket,
-        local_mode=args.local
-    )
-
-    pipeline.run(
-        year=args.year,
-        month=args.month,
-        process_all=args.all
-    )
+    BluebikesCleaningPipeline(
+        bucket       = args.bucket,
+        mode         = args.mode,
+        start_yyyymm = args.start_yyyymm,
+        end_yyyymm   = args.end_yyyymm,
+        run_id       = args.run_id,
+        force        = args.force,
+    ).run()
 
 
 if __name__ == "__main__":

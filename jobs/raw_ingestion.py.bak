@@ -1,0 +1,67 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, to_timestamp, year, month
+from pyspark.sql.types import *
+
+BUCKET = "gs://bluebikes-demand-predictor-data"
+INPUT_PATH_2023 = f"{BUCKET}/raw/trips/2023/csv/*.csv"
+INPUT_PATH_2024 = f"{BUCKET}/raw/trips/2024/csv/*.csv"
+OUTPUT_PATH = f"{BUCKET}/raw_enforced/trips/"
+
+def main():
+    spark = (
+        SparkSession.builder
+        .appName("bluebikes_raw_ingestion")
+        .getOrCreate()
+    )
+
+    trip_schema = StructType([
+        StructField("ride_id", StringType(), True),
+        StructField("rideable_type", StringType(), True),
+        StructField("started_at", StringType(), True),
+        StructField("ended_at", StringType(), True),
+        StructField("start_station_name", StringType(), True),
+        StructField("start_station_id", StringType(), True),
+        StructField("end_station_name", StringType(), True),
+        StructField("end_station_id", StringType(), True),
+        StructField("start_lat", DoubleType(), True),
+        StructField("start_lng", DoubleType(), True),
+        StructField("end_lat", DoubleType(), True),
+        StructField("end_lng", DoubleType(), True),
+        StructField("member_casual", StringType(), True),
+    ])
+
+    print("Reading raw CSV files...")
+
+    df = (
+        spark.read
+        .option("header", "true")
+        .schema(trip_schema)
+        .csv([INPUT_PATH_2023, INPUT_PATH_2024])
+    )
+
+    print("Converting timestamps...")
+
+    df = (
+        df.withColumn("started_at_ts", to_timestamp(col("started_at")))
+          .withColumn("ended_at_ts", to_timestamp(col("ended_at")))
+          .withColumn("year", year(col("started_at_ts")))
+          .withColumn("month", month(col("started_at_ts")))
+    )
+
+    print("Writing partitioned parquet...")
+
+    (
+        df
+        .repartition("year", "month")
+        .write
+        .mode("overwrite")
+        .partitionBy("year", "month")
+        .parquet(OUTPUT_PATH)
+    )
+
+    print("Raw ingestion complete.")
+
+    spark.stop()
+
+if __name__ == "__main__":
+    main()
