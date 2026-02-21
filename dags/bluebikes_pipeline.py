@@ -2,8 +2,12 @@
 BlueForecast Data Pipeline DAG
 Orchestrates the full data pipeline from raw ingestion to feature engineering,
 schema validation, and bias detection.
+
+Alert mechanism: logging-based failure callbacks on every task.
+Pipeline optimization: parallel enrichment tasks (stations, weather, holidays).
 """
 
+import logging
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -20,10 +24,59 @@ from src.pipeline_tasks import (
     detect_bias,
 )
 
+alert_logger = logging.getLogger("bluebikes_pipeline.alerts")
+alert_logger.setLevel(logging.WARNING)
+
+
+# ── Alert callback ──────────────────────────────────────────────────────────
+
+def task_failure_alert(context):
+    """
+    Logging-based alert triggered on any task failure.
+    Logs task details, exception, and execution context for debugging.
+    Can be extended to send Slack/email notifications.
+    """
+    task = context.get("task_instance")
+    dag_id = context.get("dag").dag_id
+    task_id = task.task_id
+    execution_date = context.get("execution_date")
+    exception = context.get("exception")
+    try_number = task.try_number
+    log_url = task.log_url
+
+    alert_logger.critical(
+        "=" * 60 + "\n"
+        "🚨 PIPELINE ALERT: Task Failed\n"
+        "=" * 60 + "\n"
+        "  DAG:            %s\n"
+        "  Task:           %s\n"
+        "  Execution Date: %s\n"
+        "  Try Number:     %s\n"
+        "  Exception:      %s\n"
+        "  Log URL:        %s\n"
+        "=" * 60,
+        dag_id, task_id, execution_date, try_number, exception, log_url
+    )
+
+
+def task_success_alert(context):
+    """Log successful task completion for monitoring."""
+    task = context.get("task_instance")
+    duration = task.duration
+    alert_logger.info(
+        "✅ Task '%s' completed successfully in %.1f seconds",
+        task.task_id, duration or 0
+    )
+
+
+# ── DAG definition ──────────────────────────────────────────────────────────
+
 default_args = {
     "owner": "blueforecast",
     "retries": 1,
     "retry_delay": timedelta(minutes=5),
+    "on_failure_callback": task_failure_alert,
+    "on_success_callback": task_success_alert,
 }
 
 with DAG(
@@ -48,7 +101,7 @@ with DAG(
         python_callable=clean_data,
     )
 
-    # Stage 3: Parallel enrichment tasks
+    # Stage 3: Parallel enrichment tasks (optimized — run concurrently)
     t_stations = PythonOperator(
         task_id="process_station_metadata",
         python_callable=process_station_metadata,
@@ -76,7 +129,7 @@ with DAG(
         python_callable=run_feature_engineering,
     )
 
-    # Stage 6: Schema validation
+    # Stage 6: Schema validation (anomaly detection — fails pipeline on bad data)
     t_validate = PythonOperator(
         task_id="validate_schema",
         python_callable=validate_schema,
@@ -88,8 +141,11 @@ with DAG(
         python_callable=detect_bias,
     )
 
-    # Define task dependencies
+    # ── Task dependencies ───────────────────────────────────────────────────
     # download → clean → [stations, weather, holidays] → aggregate → features → validate → bias
+    #
+    # Optimization: stations, weather, holidays run in PARALLEL after clean_data
+    # (identified via Airflow Gantt chart — these have no mutual dependencies)
     t_download >> t_clean
     t_clean >> [t_stations, t_weather, t_holidays]
     [t_stations, t_weather, t_holidays] >> t_aggregate
