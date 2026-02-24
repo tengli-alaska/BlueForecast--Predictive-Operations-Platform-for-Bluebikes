@@ -1,4 +1,4 @@
-# BlueForecast — Data Pipeline
+# BlueForecast : Data Pipeline 
 
 **End-to-end Airflow data pipeline for Bluebikes demand prediction**
 
