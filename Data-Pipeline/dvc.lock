@@ -1,0 +1,58 @@
+schema: '2.0'
+stages:
+  clean_data:
+    cmd: python -m src.data_processing.data_cleaning
+    deps:
+    - path: src/data_processing/data_cleaning.py
+      hash: md5
+      md5: c165f570acce25af7c84634862634cf3
+      size: 6867
+  process_station_metadata:
+    cmd: python -m src.data_processing.station_metadata
+    deps:
+    - path: src/data_processing/station_metadata.py
+      hash: md5
+      md5: 05fc31b3eed8e3dd73f3b892549e45e7
+      size: 2376
+  process_weather_data:
+    cmd: python -m src.data_processing.weather_data
+    deps:
+    - path: src/data_processing/weather_data.py
+      hash: md5
+      md5: b1be4eba930f6bce39157f8438368ee1
+      size: 4296
+  process_holiday_calendar:
+    cmd: python -m src.data_processing.holiday_calendar
+    deps:
+    - path: src/data_processing/holiday_calendar.py
+      hash: md5
+      md5: f638302cb953e24162f400ddaa2f79bd
+      size: 4816
+  aggregate_demand:
+    cmd: python -m src.data_processing.aggregate_demand
+    deps:
+    - path: src/data_processing/aggregate_demand.py
+      hash: md5
+      md5: deeed8f37847e398b14db1829d6f4dcc
+      size: 6370
+  feature_engineering:
+    cmd: python -m src.data_processing.feature_engineering
+    deps:
+    - path: src/data_processing/feature_engineering.py
+      hash: md5
+      md5: b35ab5573ae597661dede5ad9b901d98
+      size: 12167
+  validate_schema:
+    cmd: python -m src.data_processing.schema_validation
+    deps:
+    - path: src/data_processing/schema_validation.py
+      hash: md5
+      md5: 74f35be47750c4e881caedfcade05b8d
+      size: 10808
+  detect_bias:
+    cmd: python -m src.data_processing.bias_detection
+    deps:
+    - path: src/data_processing/bias_detection.py
+      hash: md5
+      md5: 51f917d7b688abff38e6905b8d1d22ad
+      size: 9966

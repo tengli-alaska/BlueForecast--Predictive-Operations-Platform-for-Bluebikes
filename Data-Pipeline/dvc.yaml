@@ -3,73 +3,38 @@ stages:
     cmd: python -m src.data_processing.data_cleaning
     deps:
       - src/data_processing/data_cleaning.py
-    outs:
-      - data/processed/cleaned/year=2024/cleaned.parquet:
-          cache: false
-          persist: true
 
   process_station_metadata:
     cmd: python -m src.data_processing.station_metadata
     deps:
       - src/data_processing/station_metadata.py
-    outs:
-      - data/processed/stations/stations.parquet:
-          cache: false
-          persist: true
 
   process_weather_data:
     cmd: python -m src.data_processing.weather_data
     deps:
       - src/data_processing/weather_data.py
-    outs:
-      - data/processed/weather/weather_hourly.parquet:
-          cache: false
-          persist: true
 
   process_holiday_calendar:
     cmd: python -m src.data_processing.holiday_calendar
     deps:
       - src/data_processing/holiday_calendar.py
-    outs:
-      - data/contextual/us_holidays_2023_2024.parquet:
-          cache: false
-          persist: true
 
   aggregate_demand:
     cmd: python -m src.data_processing.aggregate_demand
     deps:
       - src/data_processing/aggregate_demand.py
-      - data/processed/cleaned/year=2024/cleaned.parquet
-    outs:
-      - data/processed/features/hourly_demand_by_station.parquet:
-          cache: false
-          persist: true
 
   feature_engineering:
     cmd: python -m src.data_processing.feature_engineering
     deps:
       - src/data_processing/feature_engineering.py
-      - data/processed/features/hourly_demand_by_station.parquet
-      - data/processed/weather/weather_hourly.parquet
-      - data/processed/stations/stations.parquet
-      - data/contextual/us_holidays_2023_2024.parquet
-    outs:
-      - data/processed/features/feature_matrix.parquet:
-          cache: false
-          persist: true
 
   validate_schema:
     cmd: python -m src.data_processing.schema_validation
     deps:
       - src/data_processing/schema_validation.py
-      - data/processed/features/feature_matrix.parquet
 
   detect_bias:
     cmd: python -m src.data_processing.bias_detection
     deps:
       - src/data_processing/bias_detection.py
-      - data/processed/features/feature_matrix.parquet
-    outs:
-      - data/processed/reports/bias_report.json:
-          cache: false
-          persist: true
