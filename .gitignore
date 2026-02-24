@@ -205,3 +205,38 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Data files (too large for git)
+data/raw/
+data/processed/
+data/weather/
+data/metadata/
+data/contextual/
+data/sample/
+
+# Parquet files
+*.parquet
+
+# Large CSV files
+data/**/*.csv
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Spark temporary files
+metastore_db/
+spark-warehouse/
+derby.log
+
+# Mac files
+.DS_Store
+**/.DS_Store
+logs/
+dags/_airflow_demo_gcs_sdk.py
+src/one_step_demo_gcs_sdk.py

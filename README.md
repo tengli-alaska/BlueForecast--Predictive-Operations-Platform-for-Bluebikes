@@ -32,14 +32,15 @@ BlueForecast combines real-time demand forecasting, automated drift detection, a
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         DATA SOURCES                                │
 ├─────────────────┬──────────────────┬────────────────────────────────┤
-│  Bluebikes S3   │    GBFS API      │     OpenWeatherMap API         │
-│  (Historical)   │    (Real-time)   │     (Weather)                  │
+│  Bluebikes S3   │    GBFS API      │      Open-Meteo API            │
+│  (Historical)   │    (Real-time)   │      (Weather)                 │
 └────────┬────────┴────────┬─────────┴───────────────┬────────────────┘
          │                 │                         │
          ▼                 ▼                         ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      FEATURE PIPELINE                               │
-│  Lag features • Cyclical encoding • Weather join • Holiday flags    │
+│                    DATA PIPELINE (Airflow DAG)                       │
+│  download → clean → [stations, weather, holidays] → aggregate       │
+│  → feature engineering → schema validation → bias detection          │
 └────────────────────────────┬────────────────────────────────────────┘
                              │
               ┌──────────────┼──────────────┐
@@ -58,83 +59,123 @@ BlueForecast combines real-time demand forecasting, automated drift detection, a
 
 ---
 
-## Installation
+## Data Pipeline (Phase 1) ✅
 
-### Prerequisites
+The data pipeline is the foundation of BlueForecast. It transforms raw trip data into a clean, validated, feature-engineered dataset ready for ML model training. Orchestrated by Apache Airflow with data versioning via DVC.
 
-- Python 3.11+
-- pip
-- Docker (optional, for containerized deployment)
+### Pipeline DAG
 
-### Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/tengli-alaska/bluebikes-demand-predictor.git
-   cd bluebikes-demand-predictor
-   ```
-
-2. **Create virtual environment**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Edit `.env` and add your API keys:
-   ```
-   OPENWEATHERMAP_API_KEY=your_api_key_here
-   DATABASE_URL=postgresql://user:password@localhost:5432/blueforecast
-   ```
-
----
-
-## Quick Start
-
-### 1. Download Data
-
-```bash
-# Download historical trip data (2024)
-python src/data_loader.py --download --year 2024
-
-# Fetch current station metadata
-python src/data_loader.py --fetch-stations
+```
+download_raw_data
+    └── clean_data
+            ├── process_station_metadata ──┐
+            ├── process_weather_data     ──┼── aggregate_demand
+            └── process_holiday_calendar ──┘        └── run_feature_engineering
+                                                            └── validate_schema
+                                                                    └── detect_bias
 ```
 
-### 2. Feature Engineering
+**9 tasks** | **Parallel enrichment** for optimized execution | **Logging-based alerts** on every task
 
-```bash
-python src/features.py --input data/raw --output data/processed
+### Data Sources
+
+| Source | Type | Records | Coverage |
+|--------|------|---------|----------|
+| BlueBikes trip data | Historical CSV | ~7.88M trips | Apr 2023 – Dec 2024 |
+| Open-Meteo weather | Historical API | ~15K hourly | Apr 2023 – Dec 2024 |
+| GBFS station info | Live API | ~595 stations | Current snapshot |
+| US Federal holidays | Static | 24 holidays | 2023–2024 |
+
+### GCS Data Layout
+
+```
+gs://bluebikes-demand-predictor-data/
+├── raw/
+│   ├── trips/
+│   │   ├── 2023/
+│   │   │   ├── *.zip                          ← Raw monthly archives
+│   │   │   └── csv/                           ← Extracted CSVs (Apr–Dec)
+│   │   └── 2024/
+│   │       ├── *.zip
+│   │       └── csv/                           ← Extracted CSVs (Jan–Dec)
+│   ├── contextual/
+│   │   ├── weather/
+│   │   └── holiday/
+│   └── metadata/
+│       └── stations/
+├── processed/
+│   ├── cleaned/
+│   │   ├── year=2023/cleaned.parquet          ← 3.16M rows (98.6% retained)
+│   │   └── year=2024/cleaned.parquet          ← 4.72M rows (99.4% retained)
+│   ├── stations/stations.parquet              ← ~595 stations
+│   ├── weather/weather_hourly.parquet         ← ~15K hourly records
+│   ├── features/
+│   │   ├── hourly_demand_by_station.parquet   ← 8.2M station-hour rows
+│   │   └── feature_matrix.parquet             ← 8.2M rows × 32 columns
+│   └── reports/
+│       └── bias_report.json                   ← Bias detection results
+└── data/
+    └── contextual/
+        └── us_holidays_2023_2024.parquet      ← 24 holidays
 ```
 
-### 3. Train Model
+### Pipeline Stages
 
-```bash
-python src/model.py --train --config config/config.yaml
-```
+**Stage 1 — Data Acquisition:** Downloads raw BlueBikes trip CSVs from GCS. Supports both CSV and ZIP formats with automatic fallback.
 
-### 4. Run Inference API
+**Stage 2 — Data Cleaning:** Removes duplicates (by ride_id), null critical fields, and duration outliers (<1 min or >24 hours). Standardizes text fields, adds derived time columns. Retention rate: ~99%.
 
-```bash
-uvicorn api.app:app --host 0.0.0.0 --port 8000
-```
+**Stage 3 — Parallel Enrichment (optimized):** Three independent tasks run concurrently:
+- Station metadata from GBFS API (~595 stations with capacity)
+- Historical hourly weather from Open-Meteo (temperature, precipitation, wind, humidity)
+- US Federal holiday calendar including Patriots Day (MA-specific)
 
-### 5. Launch Dashboard
+**Stage 4 — Aggregate Demand:** Converts 7.88M trips → hourly pickup counts per station. Converts UTC → Eastern Time. Builds complete 534-station × 15,383-hour grid with zero-demand fill (68.6% sparsity).
 
-```bash
-streamlit run dashboard/ops_dashboard.py
-```
+**Stage 5 — Feature Engineering:** Joins all data sources. Adds lag features (1h, 24h, 168h), rolling averages (3h, 6h, 24h), and cyclical time encodings (sin/cos for hour, day-of-week, month). Station capacity resolved via name match + coordinate match + median fill. Output: ~8.2M rows × 32 columns, zero nulls.
 
-Open http://localhost:8501 to view the operations dashboard.
+**Stage 6 — Schema Validation:** Automated data quality gate. Checks column presence, data types, value ranges (demand ≥ 0, temperature -40°C to 50°C, hour 0–23), zero nulls, no duplicate (station, hour) pairs, and minimum row count. Pipeline fails if any check fails.
+
+**Stage 7 — Bias Detection:** Analyzes demand disparities across 6 slicing dimensions: time of day, weekday/weekend/holiday, season, station capacity, precipitation, and temperature. Computes disparity ratios and flags underrepresented groups. Outputs JSON report to GCS.
+
+### Bias Detection & Mitigation
+
+**Detected biases:**
+1. Peak hours show significantly higher demand than night hours (disparity ratio > 5x)
+2. Winter months are underrepresented compared to summer due to seasonal ridership
+3. Low-capacity stations have lower mean demand
+4. Rainy/cold conditions have different demand patterns and lower representation
+
+**Mitigation steps taken:**
+1. **Zero-demand fill** — Complete station × hour grid ensures all time slots are represented, preventing model from only learning high-demand periods
+2. **Temporal feature engineering** — Cyclical encodings preserve circular relationships (hour 23 ≈ hour 0). Lag features (1h, 24h, 168h) capture recurring patterns across time scales
+3. **Weather conditioning** — Weather features included as explicit model inputs, allowing the model to learn weather-dependent demand rather than treating low-demand weather as noise
+4. **Capacity normalization** — Station capacity included as a feature, enabling demand predictions relative to station size
+5. **Monitoring** — Bias report saved to GCS and trackable over time to detect representation drift
+
+### Anomaly Detection & Alerts
+
+- Logging-based alert callbacks on every task (failure + success)
+- Schema validation acts as automated anomaly gate — pipeline stops on data quality issues
+- Alerts include DAG ID, task ID, execution date, exception details, and log URL
+
+### Pipeline Flow Optimization
+
+Identified via Airflow Gantt chart:
+- Station metadata, weather, and holidays run in **parallel** (no mutual dependencies)
+- Memory optimized: column-selective loading, garbage collection, downcasted dtypes (int8/int16/int32)
+- Selective column reads during aggregation to reduce peak memory
+
+### Known Issues & Fixes
+
+| Issue | Fix Applied |
+|-------|-------------|
+| Raw data path mismatch (`raw/historical/` vs `raw/trips/`) | Updated `data_cleaning.py` paths to `raw/trips/{year}/csv/` |
+| `clean_data` succeeded but produced no output | Root cause: raw CSVs were at different path than expected |
+| `aggregate_demand` OOM killed (return code -9) | Added column-selective loading, `gc.collect()`, int8/16 dtypes |
+| `feature_engineering` failed silently | Missing `scipy` in Docker — added to docker-compose |
+| `humidity_pct` and `weather_code` dtype mismatch | Updated schema validation to accept `numeric` (int or float) |
+| `SettingWithCopyWarning` in data cleaning | Cosmetic — does not affect output |
 
 ---
 
@@ -142,180 +183,149 @@ Open http://localhost:8501 to view the operations dashboard.
 
 ```
 bluebikes-demand-predictor/
-├── README.md
-├── requirements.txt
-├── .env.example
-├── .gitignore
-│
-├── .github/workflows/
-│   └── tests.yml                 # CI/CD pipeline
-│
-├── config/
-│   └── config.yaml               # Hyperparameters, thresholds
-│
-├── data/
-│   ├── raw/                      # Original data files
-│   └── processed/                # Feature-engineered datasets
-│
-├── models/                       # Trained models, registry
-│
+├── dags/
+│   └── bluebikes_pipeline.py           # Airflow DAG (9 tasks, alerts, parallel)
 ├── src/
-│   ├── __init__.py
-│   ├── data_loader.py            # Data ingestion
-│   ├── features.py               # Feature engineering
-│   ├── model.py                  # Training & prediction
-│   └── monitoring.py             # Drift detection
-│
-├── api/
-│   ├── app.py                    # FastAPI service
-│   └── schemas.py                # Request/response models
-│
-├── pipelines/
-│   ├── training_pipeline.py
-│   ├── inference_pipeline.py
-│   └── monitoring_pipeline.py
-│
-├── dashboard/
-│   └── ops_dashboard.py          # Streamlit app
-│
+│   ├── pipeline_tasks.py               # Task delegation layer
+│   └── data_processing/
+│       ├── data_cleaning.py            # Raw CSV → cleaned parquet
+│       ├── station_metadata.py         # GBFS API → station parquet
+│       ├── weather_data.py             # Open-Meteo → weather parquet
+│       ├── holiday_calendar.py         # Holiday calendar generation
+│       ├── aggregate_demand.py         # Trips → hourly station demand grid
+│       ├── feature_engineering.py      # Join sources + lag/rolling/cyclical
+│       ├── schema_validation.py        # Schema, type, range, null validation
+│       └── bias_detection.py           # Data slicing + disparity analysis
 ├── tests/
-│   └── test_features.py
-│
-└── docker/
-    ├── Dockerfile
-    └── docker-compose.yml
+│   ├── conftest.py
+│   └── test_pipeline.py               # 35 unit tests across all modules
+├── config/
+│   └── config.yaml
+├── data/
+│   ├── raw/
+│   └── processed/
+├── logs/                               # Airflow task logs (auto-generated)
+├── models/
+├── notebooks/development/
+├── dashboard/
+├── pipelines/
+├── scripts/
+├── .dvc/                               # DVC configuration
+├── dvc.yaml                            # DVC pipeline definition
+├── docker-compose.yaml                 # Airflow + PostgreSQL environment
+├── requirements.txt                    # Python dependencies
+└── README.md
 ```
 
 ---
 
-## API Documentation
+## Quick Start
 
-### Predict Endpoint
+### Prerequisites
 
-**POST** `/predict`
+- Python 3.10+
+- Docker & Docker Compose
+- Google Cloud SDK (`gcloud`) with access to GCS bucket
+- DVC (`pip install dvc[gs]`)
 
-Request:
-```json
-{
-  "station_id": "67",
-  "timestamp": "2024-12-15T08:00:00",
-  "temperature": 45.2,
-  "precipitation": 0.0,
-  "wind_speed": 8.5
-}
+### 1. Clone and install
+
+```bash
+git clone https://github.com/tengli-alaska/BlueForecast--Predictive-Operations-Platform-for-Bluebikes.git
+cd BlueForecast--Predictive-Operations-Platform-for-Bluebikes
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Response:
-```json
-{
-  "station_id": "67",
-  "timestamp": "2024-12-15T08:00:00",
-  "predicted_demand": 23,
-  "stockout_risk": "low",
-  "confidence": 0.87
-}
+### 2. Configure GCP credentials
+
+```bash
+gcloud auth application-default login
+# Ensure access to gs://bluebikes-demand-predictor-data
 ```
 
-### Batch Predict
+### 3. Start Airflow
 
-**POST** `/predict/batch`
+```bash
+docker compose up -d
+# Airflow UI: http://localhost:8080
+# Default credentials: admin / admin
+```
 
-Returns predictions for all 600+ stations for the next 12 hours.
+### 4. Run the data pipeline
 
-### Health Check
+In the Airflow UI → find `bluebikes_data_pipeline` → click **Trigger DAG**.
 
-**GET** `/health`
+The pipeline runs 9 tasks in dependency order (~15–20 min for full run).
 
-Returns API status and model version.
+### 5. Run tests
 
----
+```bash
+pytest tests/test_pipeline.py -v
+# Expected: 35 passed
+```
 
-## Dashboard Features
+### 6. DVC
 
-| Feature | Description |
-|---------|-------------|
-| **Live Station Map** | Interactive Mapbox view with color-coded stockout/overfill risk |
-| **Demand Forecast** | Hourly predictions for selected station (next 12 hours) |
-| **High-Risk Stations** | Ranked list of stations needing immediate attention |
-| **Rebalancing Routes** | Suggested pickup/dropoff route for rebalancing trucks |
-| **Model Health** | Drift metrics, prediction accuracy, last retrain date |
-
----
-
-## Configuration
-
-### config.yaml
-
-```yaml
-model:
-  type: xgboost
-  n_estimators: 100
-  max_depth: 6
-  learning_rate: 0.1
-
-features:
-  lag_hours: [1, 3, 24, 168]  # 1h, 3h, 24h, 7d
-  cyclical_encoding: true
-  weather_features: [temperature, precipitation, wind_speed]
-
-monitoring:
-  drift_threshold: 0.15       # KL divergence threshold
-  mae_increase_threshold: 0.25
-  retrain_trigger_days: 14
-
-api:
-  gbfs_url: "http://gbfs.bluebikes.com/gbfs/gbfs.json"
-  weather_api_key: ${OPENWEATHERMAP_API_KEY}
+```bash
+dvc remote list              # Verify GCS remote
+dvc repro                    # Reproduce pipeline
+dvc push                     # Push data to remote
 ```
 
 ---
 
 ## Testing
 
+35 unit tests covering all pipeline modules:
+
+```
+TestDataCleaning (7)      — dedup, nulls, duration filters, text, edge cases
+TestHolidayCalendar (8)   — count, dates, categories, duplicates
+TestAggregateDemand (4)   — groupby, zero-fill, grid, time features
+TestFeatureEngineering (6) — lags, rolling avg, cyclical encoding, holidays
+TestSchemaValidation (6)  — columns, nulls, ranges, duplicates
+TestBiasDetection (4)     — disparity ratios, underrepresentation, slicing
+```
+
 ```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=src --cov-report=html
-
-# Run specific test file
-pytest tests/test_features.py -v
+pytest tests/test_pipeline.py -v
 ```
 
 ---
 
-## Deployment
+## Data Versioning (DVC)
 
-### Docker
-
-```bash
-# Build image
-docker build -t blueforecast:latest -f docker/Dockerfile .
-
-# Run container
-docker run -p 8000:8000 -p 8501:8501 --env-file .env blueforecast:latest
-```
-
-### Docker Compose
+DVC is configured with GCS as the remote storage backend:
 
 ```bash
-docker-compose -f docker/docker-compose.yml up
+dvc remote list
+# gcs_remote    gs://bluebikes-demand-predictor-data
 ```
 
-### GCP Cloud Run
+`dvc.yaml` defines the full pipeline with stage dependencies, enabling:
+- `dvc repro` — reproduce the pipeline end-to-end
+- `dvc push` / `dvc pull` — sync data with GCS remote
+- Git tracks code + DVC tracks data for full reproducibility
 
-```bash
-# Build and push to GCR
-gcloud builds submit --tag gcr.io/PROJECT_ID/blueforecast
+---
 
-# Deploy
-gcloud run deploy blueforecast \
-  --image gcr.io/PROJECT_ID/blueforecast \
-  --platform managed \
-  --region us-east1 \
-  --allow-unauthenticated
-```
+## Feature Matrix (ML-Ready Output)
+
+The data pipeline produces a feature matrix at `processed/features/feature_matrix.parquet`:
+
+| Feature Group | Columns |
+|---------------|---------|
+| **Target** | `demand_count` |
+| **Lag features** | `demand_lag_1h`, `demand_lag_24h`, `demand_lag_168h` |
+| **Rolling averages** | `rolling_avg_3h`, `rolling_avg_6h`, `rolling_avg_24h` |
+| **Weather** | `temperature_c`, `precipitation_mm`, `wind_speed_kmh`, `humidity_pct`, `feels_like_c`, `is_cold`, `is_hot`, `is_precipitation` |
+| **Time** | `hour_of_day`, `day_of_week`, `month`, `year`, `is_weekend`, `is_holiday` |
+| **Cyclical** | `hour_sin`, `hour_cos`, `dow_sin`, `dow_cos`, `month_sin`, `month_cos` |
+| **Station** | `start_station_id`, `capacity` |
+
+~8.2M rows × 32 columns | Zero nulls | Ready for model training
 
 ---
 
@@ -324,17 +334,42 @@ gcloud run deploy blueforecast \
 | Source | URL |
 |--------|-----|
 | Bluebikes Historical Trips | https://s3.amazonaws.com/hubway-data/index.html |
-| GBFS Real-Time API | http://gbfs.bluebikes.com/gbfs/gbfs.json |
+| GBFS Real-Time API | https://gbfs.bluebikes.com/gbfs/en/station_information.json |
 | Station Metadata | https://bluebikes.com/system-data |
-| Weather API | https://openweathermap.org/api |
+| Open-Meteo Weather | https://archive-api.open-meteo.com/v1/archive |
 
 *Trip data provided by Bluebikes under the [Bluebikes Data License Agreement](https://www.bluebikes.com/data-license-agreement).*
 
+---
+
+## Error Handling
+
+- Every module raises `RuntimeError` with descriptive messages when inputs are missing
+- Airflow retries failed tasks once (`retries=1`, `retry_delay=5min`)
+- Logging-based alert callbacks on every task failure with full context
+- Schema validation halts the pipeline on data quality issues
+- ZIP fallback in data cleaning handles both CSV and compressed raw files
 
 ---
 
-## License
+## Reproducibility
 
+To replicate this pipeline on a new machine:
+
+1. Clone the repo and install dependencies (`requirements.txt`)
+2. Set up GCP credentials (`gcloud auth application-default login`)
+3. Start Airflow (`docker compose up -d`)
+4. Trigger the DAG from the Airflow UI
+5. Verify with `pytest tests/test_pipeline.py -v`
+6. Use `dvc pull` to fetch data from GCS, or `dvc repro` to regenerate
+
+All code, configuration, and pipeline definitions are version-controlled. Data is versioned separately via DVC with GCS remote.
+
+---
+
+## Team
+
+BlueForecast — MLOps Course Project
 
 ---
 
@@ -342,4 +377,4 @@ gcloud run deploy blueforecast \
 
 - Bluebikes for providing open trip data
 - Blue Cross Blue Shield of Massachusetts (Bluebikes sponsor)
-- OpenWeatherMap for weather API access
+- Open-Meteo for free weather API access
