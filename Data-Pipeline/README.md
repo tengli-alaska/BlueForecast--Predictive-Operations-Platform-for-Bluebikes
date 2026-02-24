@@ -68,6 +68,9 @@ In the Airflow UI → find `bluebikes_data_pipeline` → click **Trigger DAG**.
 
 Full run takes ~15 minutes (both years).
 
+<img width="971" height="248" alt="Screenshot 2026-02-23 at 09 58 03" src="https://github.com/user-attachments/assets/2b341c46-a7ed-47bf-9b10-175e2b9ad621" />
+
+
 ### 5. Run tests
 
 ```bash
