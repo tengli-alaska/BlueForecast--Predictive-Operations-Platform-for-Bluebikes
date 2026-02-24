@@ -85,6 +85,13 @@ dvc push                     # Push data to remote
 
 ---
 
+Verification by:
+cd Data-Pipeline
+dvc remote list          # sees GCS remote
+dvc repro                # reproduces pipeline
+ls data/processed/*.dvc  # sees tracked datasets
+cat dvc.lock             # sees recorded stage hashes
+
 ## Folder Structure
 
 ```
