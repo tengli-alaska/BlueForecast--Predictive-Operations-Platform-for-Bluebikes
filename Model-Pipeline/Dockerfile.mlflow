@@ -1,0 +1,13 @@
+# Minimal MLflow server image with GCS artifact store support
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir \
+    "typing_extensions>=4.13.0" \
+    "mlflow>=2.10.0" \
+    "google-cloud-storage>=2.10.0"
+
+EXPOSE 5000
+
+# Backend: SQLite (local, persisted via volume)
+# Artifact root: GCS (set via docker-compose command)
+CMD ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000"]
