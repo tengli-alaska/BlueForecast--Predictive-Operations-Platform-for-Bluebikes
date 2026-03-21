@@ -9,15 +9,22 @@ metric computation, and prediction output safety.
 Run: pytest Model-Pipeline/tests/test_model_pipeline.py -v
 """
 
+# Mock google.cloud before any module imports to avoid needing credentials
+import sys
+from unittest.mock import MagicMock
+sys.modules['google'] = MagicMock()
+sys.modules['google.cloud'] = MagicMock()
+sys.modules['google.cloud.storage'] = MagicMock()
+
 import json
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
-import sys, os
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
