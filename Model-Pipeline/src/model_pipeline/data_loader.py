@@ -11,8 +11,10 @@ Log it with every MLflow run for full data provenance.
 import hashlib
 import io
 import logging
+import pickle
 
 import pandas as pd
+from sklearn.preprocessing import LabelEncoder
 from google.cloud import storage
 
 logger = logging.getLogger("model_pipeline.data_loader")
@@ -101,8 +103,15 @@ def load_feature_matrix() -> tuple[pd.DataFrame, str]:
     # Encode station ID as integer — raw values are strings like 'A32000'
     # XGBoost requires all features to be numeric
     if "start_station_id" in df.columns:
-        df["start_station_id"] = df["start_station_id"].astype("category").cat.codes
+        le = LabelEncoder()
+        df["start_station_id"] = le.fit_transform(df["start_station_id"].astype(str))
         logger.info("Encoded start_station_id: %s unique stations", df["start_station_id"].nunique())
+        
+        # Save encoder to GCS
+        le_bytes = pickle.dumps(le)
+        enc_blob = client.bucket(BUCKET).blob("processed/features/station_label_encoder.pkl")
+        enc_blob.upload_from_string(le_bytes)
+        logger.info("LabelEncoder saved to GCS")
 
     _validate_schema(df)
 
@@ -112,7 +121,7 @@ def load_feature_matrix() -> tuple[pd.DataFrame, str]:
             "Run the data pipeline first."
         )
 
-    return df, dataset_version_hash
+    return df, dataset_version_hash, le
 
 
 def _validate_schema(df: pd.DataFrame) -> None:

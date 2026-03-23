@@ -27,6 +27,7 @@ WRITTEN TO:
 """
 
 import io
+import pickle
 import logging
 from datetime import datetime, timezone
 
@@ -327,9 +328,9 @@ def run_prediction_pipeline() -> pd.DataFrame:
     df, _                      = load_feature_matrix()
 
     # Fit LabelEncoder on full feature matrix (same station universe as training)
-    le = LabelEncoder()
-    le.fit(df["start_station_id"])
-    logger.info("LabelEncoder fit on %d station IDs", len(le.classes_))
+    enc_blob = storage.Client().bucket(BUCKET).blob("processed/features/station_label_encoder.pkl")
+    le = pickle.loads(enc_blob.download_as_bytes())
+    logger.info("LabelEncoder loaded from GCS: %d station IDs", len(le.classes_))
 
     predictions_df = generate_24h_forecasts(
         model=model,

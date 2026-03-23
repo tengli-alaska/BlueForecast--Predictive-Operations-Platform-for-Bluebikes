@@ -166,7 +166,7 @@ def task_validate_data_input(**context) -> dict:
         from model_pipeline.trainer import _setup_mlflow
 
         _setup_mlflow()
-        df, dataset_hash = load_feature_matrix()
+        df, dataset_hash, _le = load_feature_matrix()
 
         context["ti"].xcom_push(key="dataset_hash", value=dataset_hash)
         context["ti"].xcom_push(key="dataset_rows",  value=len(df))
@@ -201,7 +201,7 @@ def task_train_and_evaluate(**context) -> dict:
         from model_pipeline.evaluator    import evaluate_on_test
 
         _setup_mlflow()
-        df, _ = load_feature_matrix()
+        df, _, _le = load_feature_matrix()
         train_df, val_df, test_df = temporal_split(df)
 
         X_train, y_train = get_X_y(train_df)
@@ -293,7 +293,7 @@ def task_detect_bias_and_sensitivity(**context) -> dict:
         forecaster._model = xgb_model
         forecaster.set_feature_names(FEATURE_COLS)
 
-        df, _ = load_feature_matrix()
+        df, _, _le = load_feature_matrix()
         train_df, val_df, test_df = temporal_split(df)
         X_train, y_train = get_X_y(train_df)
         X_val,   y_val   = get_X_y(val_df)

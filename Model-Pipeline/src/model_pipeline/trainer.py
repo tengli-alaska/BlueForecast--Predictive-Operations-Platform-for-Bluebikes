@@ -118,9 +118,10 @@ class XGBoostForecaster(BaseForecaster):
         self,
         X_train: np.ndarray,
         y_train: np.ndarray,
-        X_val:   np.ndarray,
-        y_val:   np.ndarray,
-        params:  dict[str, Any],
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        params: dict[str, Any],
+        sample_weight: np.ndarray | None = None,  # <-- ADD THIS LINE
     ) -> "XGBoostForecaster":
         # In XGBoost >=2.0 early_stopping_rounds moved to the constructor.
         early_stopping_rounds = params.get("early_stopping_rounds", 20)
@@ -132,7 +133,9 @@ class XGBoostForecaster(BaseForecaster):
             early_stopping_rounds=early_stopping_rounds,
         )
         self._model.fit(
-            X_train, y_train,
+            X_train,
+            y_train,
+            sample_weight=sample_weight,
             eval_set=[(X_val, y_val)],
             verbose=50,  # print every 50 rounds
         )
@@ -237,10 +240,11 @@ def run_training_pipeline(
     y_train,
     X_val,
     y_val,
-    feature_cols:         list[str],
+    feature_cols: list[str],
     dataset_version_hash: str,
-    params:               dict[str, Any] | None = None,
-    forecaster_class:     type[BaseForecaster]  = XGBoostForecaster,
+    params: dict[str, Any] | None = None,
+    forecaster_class: type[BaseForecaster] = XGBoostForecaster,
+    sample_weight: np.ndarray | None = None,  
 ) -> tuple[BaseForecaster, str]:
     """
     Full training pipeline: train → evaluate → log to MLflow → select best model.
@@ -296,7 +300,7 @@ def run_training_pipeline(
         # --- Train ---
         logger.info("Training %s on %s rows...", forecaster.model_type,
                     f"{len(X_train_arr):,}")
-        forecaster.train(X_train_arr, y_train_arr, X_val_arr, y_val_arr, params)
+        forecaster.train(X_train_arr, y_train_arr, X_val_arr, y_val_arr, params, sample_weight=sample_weight)
         logger.info("Training complete. Best iteration: %d", forecaster.best_iteration)
         mlflow.log_metric("best_iteration", forecaster.best_iteration)
 
