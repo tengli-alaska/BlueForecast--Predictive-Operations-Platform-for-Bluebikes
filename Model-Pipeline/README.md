@@ -435,29 +435,53 @@ gsutil lifecycle set lifecycle.json gs://bluebikes-demand-predictor-data
 
 ## CI/CD
 
+### CI/CD Jobs
+
+The GitHub Actions workflow (`.github/workflows/model_pipeline.yml`) defines 4 jobs:
+
+| Job | When it runs | What it does |
+|-----|-------------|-------------|
+| **Lint + Unit Tests** | Every push/PR touching `Model-Pipeline/**` | `ruff check` + `pytest` (29 tests) |
+| **Docker Build Verification** | Push to `main` only | `docker compose build --no-cache` |
+| **Model Training + Validation + Bias Detection** | Manual trigger (`workflow_dispatch`) with `run_training: true` | Trains on 5% sample → evaluates → bias check → sensitivity (SHAP) |
+| **Pipeline Notifications** | After every test run | Slack alert on failure, GitHub Issue fallback |
+
 ### Pipeline Triggers
 
-| Trigger | Jobs |
-|---------|------|
-| Push to any branch touching `Model-Pipeline/**` | `test` (lint + 29 unit tests) |
+| Trigger | Jobs that run |
+|---------|--------------|
+| Push to any branch touching `Model-Pipeline/**` | `test` |
 | PR into `main` | `test` — **blocks merge if red** |
-| Push to `main` | `test` + `docker-build` (build verification, no push) |
+| Push to `main` | `test` + `docker-build` |
 | `Data-Pipeline/.../feature_engineering.py` changes | `test` — schema contract check |
-| `workflow_dispatch` | `test` (manual trigger) |
+| `workflow_dispatch` with `run_training: false` | `test` only |
+| `workflow_dispatch` with `run_training: true` | `test` → `train` (full pipeline in CI) |
+
+### CI/CD Model Training
+
+The `train` job runs the complete model pipeline in CI when manually triggered:
 
 ```
-ruff check Model-Pipeline/src/ Model-Pipeline/dags/
-    ↓
-pytest Model-Pipeline/tests/test_model_pipeline.py -v
-    ↓
-[main only] docker compose build --no-cache
+workflow_dispatch (run_training: true)
+    └── test (lint + 29 unit tests)
+            └── train
+                 ├── Train model (5% sample for CI speed)
+                 ├── Evaluate on test set (RMSE/R²/MAE gates)
+                 ├── Bias detection (6 slice dimensions)
+                 └── Sensitivity analysis (SHAP + feature importance)
 ```
 
-Full model retraining is **never auto-triggered in CI** — requires GCP credentials and 8.2M-row GCS access. Training is triggered manually via Airflow or `workflow_dispatch`.
+**How to trigger:**
+1. Go to GitHub → Actions → "Model Pipeline CI"
+2. Click **"Run workflow"**
+3. Set `Run model training` to `true` (optionally enable Optuna HPO)
+4. Click **"Run workflow"**
+
+**Requirements:** `GCP_SA_KEY_JSON` must be configured as a GitHub repository secret for GCS data access. Without this secret, the training job will fail at the GCP authentication step — the lint/test jobs still run independently.
+
+**Design decision:** Training is gated behind `workflow_dispatch` (not triggered on every push) because it requires GCP credentials and loads 8.2M rows from GCS. Full production training (100% data, 300+ trees) runs via the Airflow DAG on infrastructure with sufficient memory. The CI training job uses a 5% sample to verify the entire pipeline works end-to-end.
 
 ### Notifications and Alerts
-
-The CI/CD pipeline includes automated notifications for pipeline state changes:
 
 **Slack notifications** (requires `SLACK_WEBHOOK_URL` secret in GitHub repo settings):
 - Failure on any branch: posts run details + link to logs
@@ -471,9 +495,9 @@ The CI/CD pipeline includes automated notifications for pipeline state changes:
 - Crash logs written to `processed/pipeline-logs/crashes/` on any task failure
 - Airflow alert callbacks log task ID, execution date, and exception on every failure
 
-**Setup Slack (one-time):**
-1. Create an incoming webhook at [api.slack.com/apps](https://api.slack.com/apps)
-2. Add `SLACK_WEBHOOK_URL` as a GitHub repository secret (Settings → Secrets → Actions)
+**Setup secrets (one-time):**
+1. `SLACK_WEBHOOK_URL` — Create an incoming webhook at [api.slack.com/apps](https://api.slack.com/apps), add as GitHub secret
+2. `GCP_SA_KEY_JSON` — Export your GCP service account key as JSON, add as GitHub secret (required for CI training only)
 
 ---
 
