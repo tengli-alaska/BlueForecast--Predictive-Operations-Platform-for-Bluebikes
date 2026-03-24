@@ -39,9 +39,9 @@ x-airflow-common: &airflow-common
       pandas>=2.0.0
       numpy>=1.24.0
       pyarrow>=12.0.0
-      optuna>=3.5.0
+      optuna>=3.0.0
+      matplotlib>=3.7.0
       scipy>=1.11.0
-      matplotlib>=3.8.0
   volumes:
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src

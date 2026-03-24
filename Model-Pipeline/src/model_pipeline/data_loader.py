@@ -71,7 +71,7 @@ FEATURE_COLS = [
 REQUIRED_COLUMNS = FEATURE_COLS + [TARGET, "hour"]
 
 
-def load_feature_matrix() -> tuple[pd.DataFrame, str]:
+def load_feature_matrix() -> tuple[pd.DataFrame, str, "LabelEncoder"]:
     """
     Load the feature matrix from GCS and validate the training contract.
 
