@@ -68,7 +68,7 @@ Model-Pipeline/
 │       └── predictor.py             # Recursive 24h rolling forecast per station
 │
 ├── tests/
-│   └── test_model_pipeline.py       # 17 unit tests — no GCS/MLflow credentials needed
+│   └── test_model_pipeline.py       # 29 unit tests — no GCS/MLflow credentials needed
 │
 ├── train.py                         # Dev runner: python train.py (QUICK_CHECK=True for 5% sample)
 ├── evaluate.py                      # Dev runner: load approved run, re-run test gate
@@ -104,7 +104,7 @@ docker compose ps
 
 | UI | URL |
 |----|-----|
-| Airflow | http://localhost:8082 (admin / admin) |
+| Airflow | http://localhost:8082 (airflow / airflow) |
 | MLflow  | http://localhost:5000 |
 
 ### 2. Trigger the DAG
@@ -319,7 +319,7 @@ When the deployment pipeline goes live, upgrade `ALERT` status to block promotio
 
 ## Tests
 
-17 unit tests covering the logic layer of every module. No GCS or MLflow credentials required — all external calls are mocked.
+29 unit tests covering the logic layer of every module. No GCS or MLflow credentials required — all external calls are mocked.
 
 ```bash
 # Run locally
@@ -429,7 +429,7 @@ gsutil lifecycle set lifecycle.json gs://bluebikes-demand-predictor-data
 
 | Trigger | Jobs |
 |---------|------|
-| Push to any branch touching `Model-Pipeline/**` | `test` (lint + 17 unit tests) |
+| Push to any branch touching `Model-Pipeline/**` | `test` (lint + 29 unit tests) |
 | PR into `main` | `test` — **blocks merge if red** |
 | Push to `main` | `test` + `docker-build` (build verification, no push) |
 | `Data-Pipeline/.../feature_engineering.py` changes | `test` — schema contract check |
