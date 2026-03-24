@@ -62,7 +62,7 @@ Model-Pipeline/
 │       ├── evaluate.py              # Hold-out test-set gate (RMSE / R² / MAE thresholds)
 │       ├── bias_detection.py        # 6-slice RMSE disparity analysis + mitigation weights
 │       ├── sensitivity.py           # SHAP TreeExplainer + OAT sweep + Bayesian optimization (Optuna)
-│       ├── visualizer.py            # MLflow chart artifacts (feature importance, version comparison, sensitivity curves)
+│       ├── visualizations.py            # MLflow chart artifacts (feature importance, version comparison, sensitivity curves)
 │       ├── drift_detector.py        # KL divergence feature/target drift + MAE performance drift detection
 │       ├── registry.py              # MLflow Model Registry push + rollback gate
 │       └── predictor.py             # Recursive 24h rolling forecast per station
