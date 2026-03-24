@@ -37,6 +37,9 @@ x-airflow-common: &airflow-common
       pandas>=2.0.0
       numpy>=1.24.0
       pyarrow>=12.0.0
+      optuna>=3.5.0
+      scipy>=1.11.0
+      matplotlib>=3.8.0
   volumes:
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src
@@ -71,7 +74,8 @@ services:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 15
+      start_period: 300s
 
   # ── Airflow scheduler ─────────────────────────────────────────────────────
   airflow-scheduler:

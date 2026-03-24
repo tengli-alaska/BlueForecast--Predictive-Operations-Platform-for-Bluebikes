@@ -1,0 +1,22 @@
+artifact_path: /Users/alaskatengli/Documents/MLops_Project_Local/bluebikes-demand-predictor/Model-Pipeline/mlruns/186324118285600254/models/m-94bc52c28fcb43caa8ab9c6f09cd3f5d/artifacts
+flavors:
+  python_function:
+    data: model.ubj
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.xgboost
+    python_version: 3.13.2
+  xgboost:
+    code: null
+    data: model.ubj
+    model_class: xgboost.sklearn.XGBRegressor
+    model_format: ubj
+    xgb_version: 3.2.0
+mlflow_version: 3.10.1
+model_id: m-94bc52c28fcb43caa8ab9c6f09cd3f5d
+model_size_bytes: 239691
+model_uuid: m-94bc52c28fcb43caa8ab9c6f09cd3f5d
+prompts: null
+run_id: 411dae839b1543f9b9eb3e0b6b84b494
+utc_time_created: '2026-03-24 00:20:44.741612'

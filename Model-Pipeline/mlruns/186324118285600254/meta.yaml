@@ -1,0 +1,7 @@
+artifact_location: /Users/alaskatengli/Documents/MLops_Project_Local/bluebikes-demand-predictor/Model-Pipeline/mlruns/186324118285600254
+creation_time: 1774311643176
+experiment_id: '186324118285600254'
+last_update_time: 1774311643176
+lifecycle_stage: active
+name: BlueForecast-Demand
+workspace: default

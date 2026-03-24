@@ -1,0 +1,14 @@
+artifact_uri: /Users/alaskatengli/Documents/MLops_Project_Local/bluebikes-demand-predictor/Model-Pipeline/mlruns/186324118285600254/411dae839b1543f9b9eb3e0b6b84b494/artifacts
+end_time: 1774311649123
+entry_point_name: ''
+experiment_id: '186324118285600254'
+lifecycle_stage: active
+run_id: 411dae839b1543f9b9eb3e0b6b84b494
+run_name: wise-penguin-171
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1774311643603
+status: 3
+tags: []
+user_id: alaskatengli
