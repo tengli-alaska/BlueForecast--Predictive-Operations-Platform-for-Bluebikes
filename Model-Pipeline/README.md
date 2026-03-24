@@ -11,8 +11,8 @@ Data Pipeline  ──►  feature_matrix.parquet (GCS)
                             │
                             ▼
               ┌─────────────────────────────┐
-              │      Model Pipeline         │
-              │    (Airflow + MLflow)       │
+              │      Model Pipeline          │
+              │    (Airflow + MLflow)        │
               │                             │
               │  t1: validate_data_input    │
               │  t2: train_and_evaluate     │
@@ -58,18 +58,17 @@ Model-Pipeline/
 │   └── model_pipeline/
 │       ├── data_loader.py           # Load feature_matrix.parquet, schema validation, MD5 hash
 │       ├── splitter.py              # Temporal train/val/test split (no shuffle — leakage-safe)
-│       ├── trainer.py               # BaseForecaster ABC + XGBoostForecaster + Optuna integration
-│       ├── hyperparam_tuner.py      # Optuna TPE Bayesian hyperparameter optimization
-│       ├── evaluator.py             # Hold-out test-set gate (RMSE / R² / MAE thresholds)
+│       ├── trainer.py               # BaseForecaster ABC + XGBoostForecaster implementation
+│       ├── evaluate.py              # Hold-out test-set gate (RMSE / R² / MAE thresholds)
 │       ├── bias_detection.py        # 6-slice RMSE disparity analysis + mitigation weights
-│       ├── sensitivity.py           # SHAP TreeExplainer + one-at-a-time hyperparam sweep
-│       ├── visualizations.py        # Result plots (5 types) → GCS + MLflow artifacts
-│       ├── drift_detector.py        # Production drift monitoring (KL divergence, MAE trend)
+│       ├── sensitivity.py           # SHAP TreeExplainer + OAT sweep + Bayesian optimization (Optuna)
+│       ├── visualizer.py            # MLflow chart artifacts (feature importance, version comparison, sensitivity curves)
+│       ├── drift_detector.py        # KL divergence feature/target drift + MAE performance drift detection
 │       ├── registry.py              # MLflow Model Registry push + rollback gate
 │       └── predictor.py             # Recursive 24h rolling forecast per station
 │
 ├── tests/
-│   └── test_model_pipeline.py       # 29 unit tests — no GCS/MLflow credentials needed
+│   └── test_model_pipeline.py       # 17 unit tests — no GCS/MLflow credentials needed
 │
 ├── train.py                         # Dev runner: python train.py (QUICK_CHECK=True for 5% sample)
 ├── evaluate.py                      # Dev runner: load approved run, re-run test gate
@@ -112,28 +111,7 @@ docker compose ps
 
 In the Airflow UI at `localhost:8082`:
 - Find the `model_pipeline` DAG
-- Click **Trigger DAG** with JSON config:
-
-```json
-{
-  "skip_hyperparam_sweep": true,
-  "run_optuna": false
-}
-```
-
-**DAG config options:**
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `skip_hyperparam_sweep` | `true` | Skip OAT sensitivity sweep (~15 min saved) |
-| `run_optuna` | `false` | Run Optuna Bayesian HPO before training (~15–30 min) |
-| `optuna_n_trials` | `30` | Number of Optuna trials (only used if `run_optuna=true`) |
-| `optuna_sample_frac` | `0.20` | Fraction of training data for Optuna subsample |
-
-**Timing estimates:**
-- Fast run (`skip_hyperparam_sweep=true`, `run_optuna=false`): ~25 min
-- Full OAT sweep: ~45 min
-- Full Optuna + OAT: ~60–75 min
+- Click **Trigger DAG** → set `skip_hyperparam_sweep: true` for a fast run (~25 min), or `false` for full sweep (~45 min)
 
 ### 3. Watch live status
 
@@ -161,9 +139,8 @@ This enables auto-deletion of crash logs after 30 days.
 | `processed/models/{run_id}/bias_report.json` | Per-slice RMSE + disparity ratios across all 6 dimensions |
 | `processed/models/{run_id}/feature_importance.json` | XGBoost gain scores + SHAP mean \|SHAP\| per feature |
 | `processed/models/{run_id}/shap_summary.json` | SHAP values (10k-row sample) |
-| `processed/models/{run_id}/hyperparam_sensitivity.json` | OAT sweep results per parameter |
-| `processed/models/{run_id}/optuna_search.json` | Optuna Bayesian HPO results (if `run_optuna=true`) |
-| `processed/models/{run_id}/plots/*.png` | 5 result visualizations (see [Visualizations](#result-visualizations)) |
+| `processed/models/{run_id}/hyperparam_sensitivity.json` | OAT sweep results + Bayesian optimization best params per parameter |
+| `processed/models/{run_id}/drift_report.json` | Feature / target / performance drift scores vs. training distribution |
 | `processed/models/approved/metadata.json` | Champion model provenance (run_id, version, hash, commit SHA) |
 | `processed/predictions/latest/predictions.parquet` | 24h forecast for all 534 stations (overwritten each run) |
 | `processed/predictions/{date}/predictions.parquet` | Dated snapshot |
@@ -182,8 +159,8 @@ validate_data_input  →  train_and_evaluate  →  detect_bias_and_sensitivity  
 | Task | What it does | XCom output | Timeout |
 |------|-------------|-------------|---------|
 | `validate_data_input` | Loads `feature_matrix.parquet`, validates schema (29 required columns, zero nulls), computes MD5 hash for dataset versioning | `dataset_hash` (str) | — |
-| `train_and_evaluate` | [Optional Optuna HPO →] Temporal split → XGBoost training → val RMSE model selection → test-set gate (blocks if thresholds fail) | `run_id` (str), `val_rmse` (float) | 1 hour |
-| `detect_bias_and_sensitivity` | RMSE disparity check across 6 slice dimensions → blocks if any exceeds 3.0× → SHAP + feature importance → optional hyperparam sweep → **result visualizations** (5 plots) | `bias_status` (str) | 1 hour |
+| `train_and_evaluate` | Temporal split → XGBoost training → val RMSE model selection → test-set gate (blocks if thresholds fail) | `run_id` (str), `val_rmse` (float) | 1 hour |
+| `detect_bias_and_sensitivity` | RMSE disparity check across 6 slice dimensions → blocks if any exceeds 3.0× → SHAP + feature importance → optional OAT sweep + Bayesian optimization → drift detection (feature / target / performance) | `bias_status` (str) | 1 hour |
 | `register_and_predict` | Rollback gate (blocks if new RMSE > champion × 1.10) → MLflow registry push → champion alias update → 24h recursive forecast | `registry_version` (int), `predictions_gcs` (str) | 30 min |
 
 **XCom carries small primitives only** — never DataFrames. Each task re-loads data from GCS independently (stateless workers).
@@ -211,41 +188,31 @@ The model is wrapped behind a `BaseForecaster` ABC. Swapping to LightGBM or a Te
 | `early_stopping_rounds` | 20 | Stops on val RMSE plateau |
 | `objective` | reg:squarederror | Regression target |
 
-### Hyperparameter Tuning
+### Tuning Done
 
-Two complementary approaches are implemented:
-
-**1. One-at-a-time (OAT) sensitivity sweep** (`sensitivity.py`)
-
-Varies one parameter while holding others at base values. Run on a 20% training subsample.
+**Round 1 — One-at-a-time (OAT) sensitivity sweep** on a 20% training subsample:
 
 | Parameter | Values tested | Best | Verdict |
 |-----------|--------------|------|---------|
-| `n_estimators` | 100, 200, 300, 500, 700 | 700 (still declining) | **Raise to 1000 next run** |
-| `max_depth` | 3, 4, 6, 8, 10 | 8 (plateau at 8–10) | **Raise to 8 next run** |
-| `learning_rate` | 0.01, 0.03, 0.05, 0.1, 0.2 | 0.05 | Already optimal |
+| `n_estimators` | 100, 300, 500, 700 | 700 (still declining) | Raise to 1000 next run |
+| `max_depth` | 3, 6, 8, 10 | 8 (plateau at 8–10) | Raise to 8 next run |
+| `learning_rate` | 0.01, 0.05, 0.10, 0.20 | 0.05 | Already optimal |
 
-**2. Optuna Bayesian optimization** (`hyperparam_tuner.py`)
+**Round 2 — Bayesian optimization (Optuna TPE, 50 trials)** — available, off by default. Enable at trigger time:
 
-Joint search across 8 parameters using TPE (Tree-structured Parzen Estimator). Explores interaction effects that OAT misses (e.g., deeper trees with lower learning rate).
+```
+run_bayesian_search: true   ← set in DAG trigger conf
+```
 
-| Parameter | Search space | Scale |
-|-----------|-------------|-------|
-| `n_estimators` | 100 – 1000 (step 100) | Linear |
-| `max_depth` | 3 – 10 | Linear |
-| `learning_rate` | 0.01 – 0.20 | Log |
-| `subsample` | 0.6 – 1.0 | Linear |
-| `colsample_bytree` | 0.6 – 1.0 | Linear |
-| `min_child_weight` | 1 – 10 | Linear |
-| `reg_alpha` | 0.001 – 10.0 | Log |
-| `reg_lambda` | 0.001 – 10.0 | Log |
+| Search space | Range |
+|---|---|
+| `n_estimators` | 200 – 1500 |
+| `max_depth` | 4 – 10 |
+| `learning_rate` | 0.01 – 0.20 |
+| `subsample` | 0.60 – 1.0 |
+| `colsample_bytree` | 0.60 – 1.0 |
 
-**Design decisions:**
-- **TPE sampler** over random/grid search — converges faster with small trial budgets (20–50 trials), adapts sampling based on previous results.
-- **20% subsample** balances speed vs representativeness. Directional improvements transfer to full dataset.
-- **Joint search space** addresses the OAT limitation: interaction effects between parameters are now explored.
-- Best params are merged into the final full-data training run and logged to MLflow with the tag `hpo_method: optuna_tpe_bayesian`.
-- Results saved to `processed/models/{run_id}/optuna_search.json` on GCS.
+Runs on the same 20% subsample as the OAT sweep (speed + consistency). Best params and `improvement_delta` are logged to MLflow tags and included in `hyperparam_sensitivity.json`. Joint interaction effects between all 5 parameters are explored in a single run (~15 min extra).
 
 ### Model Metrics (Baseline Run)
 
@@ -280,7 +247,7 @@ A model must pass **all three** simultaneously to proceed to bias detection and 
 
 ### Future Scope
 
-**Level 1 — Better XGBoost (days):** `n_estimators=1000`, `max_depth=8`, full Optuna run (50+ trials), station cluster embeddings. Expected RMSE: ~1.0–1.1.
+**Level 1 — Better XGBoost (days):** `n_estimators=1000`, `max_depth=8`, Optuna Bayesian search, station cluster embeddings. Expected RMSE: ~1.0–1.1.
 
 **Level 2 — Richer features (weeks):** Events calendar (marathons, concerts), nearby station demand as spatial features, longer rolling windows (2-week, monthly), public transit disruption flags. Expected RMSE: ~0.80–0.95.
 
@@ -288,19 +255,21 @@ A model must pass **all three** simultaneously to proceed to bias detection and 
 
 ---
 
-## Result Visualizations
+## MLflow Visualizations
 
-The pipeline generates **5 publication-quality plots** during the `detect_bias_and_sensitivity` task. All plots are saved as PNG to GCS and logged as MLflow artifacts.
+Three charts are automatically generated and logged as MLflow artifacts under `charts/` at the end of every t3 run. Chart failures are non-fatal — a chart error never crashes the pipeline.
 
-| Plot | File | What it shows |
-|------|------|--------------|
-| Feature importance | `feature_importance.png` | Side-by-side horizontal bar chart: SHAP mean\|value\| vs XGBoost gain (top 15 features) |
-| Predicted vs actual | `predicted_vs_actual.png` | Scatter plot with perfect-prediction line, RMSE/R² annotation (50k-sample for readability) |
-| Residual distribution | `residual_distribution.png` | Histogram of (actual − predicted) with mean/std/median annotations |
-| Bias disparity | `bias_disparity.png` | Bar chart of RMSE disparity ratios across all 6 slice dimensions, red threshold line at 3.0× |
-| SHAP summary | `shap_summary.png` | Beeswarm plot showing feature impact direction and magnitude (5k-sample) |
+| Chart | Artifact path | What it shows |
+|-------|--------------|---------------|
+| **Feature Importance** | `charts/feature_importance.png` | Horizontal bar chart of top-15 features by mean \|SHAP\| value |
+| **Version Comparison** | `charts/version_comparison.png` | Grouped bar (val RMSE + test RMSE) across the last 10 approved runs — current run highlighted |
+| **Sensitivity Curves** | `charts/sensitivity_curves.png` | One subplot per hyperparameter from the OAT sweep: val RMSE vs. param value, base value marked with dashed red line, best value with green dot |
 
-Plots are stored at `processed/models/{run_id}/plots/` on GCS and under `plots/` in the MLflow run artifacts. Plot GCS URIs are also logged as MLflow tags (`plot_feature_importance`, `plot_predicted_vs_actual`, etc.) for quick access from the MLflow UI.
+View them in the MLflow UI under **Artifacts → charts/** for any run, or download via:
+
+```bash
+mlflow artifacts download --run-id <run_id> --artifact-path charts -d ./charts_out
+```
 
 ---
 
@@ -317,59 +286,65 @@ Model RMSE is evaluated across **6 slice dimensions** on the test set. Any dimen
 | `precipitation` | dry / rainy | ≤ 3.0× | ✅ PASSED |
 | `temperature` | cold (<10°C) / mild / hot (>25°C) | ≤ 3.0× | ✅ PASSED |
 
-> ⚠️ **Watch item:** `station_capacity` at **2.96×** — 1.3% below the gate. Low-dock stations (≤10 docks) are meaningfully harder to predict. The data pipeline showed a 10.21× raw demand disparity; the model narrows this to 2.96× RMSE disparity.
-
-### Bias Mitigation
-
-Mitigation weights (`compute_mitigation_weights()` in `bias_detection.py`) are implemented and wired into the training pipeline via the `sample_weight` parameter in `trainer.py`. When activated, the model upweights underrepresented slices during training to reduce RMSE disparity. The weights are ready to activate automatically if station capacity disparity crosses 3.0× on the next run.
-
-The `sample_weight` support flows through the entire stack: `BaseForecaster.train()` → `XGBoostForecaster.train()` → `run_training_pipeline()` → Airflow task wrapper. MLflow logs whether bias mitigation was applied via the `bias_mitigation_applied` tag.
+> ⚠️ **Watch item:** `station_capacity` at **2.96×** — 1.3% below the gate. Low-dock stations (≤10 docks) are meaningfully harder to predict. The data pipeline showed a 10.21× raw demand disparity; the model narrows this to 2.96× RMSE disparity. Mitigation weights (`compute_mitigation_weights()`) are implemented and ready to activate if this crosses 3.0× on the next run.
 
 Minimum group size to qualify for disparity computation: **1,000 samples**. Groups below this are excluded from the ratio to avoid statistical noise.
 
-Bias report is written to `processed/models/{run_id}/bias_report.json` and logged to the MLflow run as tags. The bias disparity bar chart is generated as part of the [Result Visualizations](#result-visualizations).
+Bias report is written to `processed/models/{run_id}/bias_report.json` and logged to the MLflow run as tags.
 
 ---
 
-## Drift Detection
+## Production Monitoring — Drift Detection
 
-The `drift_detector.py` module provides production model monitoring across three dimensions:
+Drift detection runs at the end of t3 (after bias + sensitivity) using training distribution as the reference and the test split as the proxy for "current production data". All results are **informational** — drift never blocks pipeline promotion at this stage (no live production traffic yet).
 
-| Drift Type | Method | Threshold | Action |
-|-----------|--------|-----------|--------|
-| **Feature drift** | KL divergence per feature between training and production distributions | > 0.1 per feature | Alert: lists drifted features |
-| **Performance drift** | MAE comparison between validation baseline and production errors | > 20% increase | Alert: recommend retraining |
-| **Target drift** | KL divergence between training and production target distributions | > 0.15 | Alert: concept drift detected |
+| Check | Method | Threshold | Output |
+|-------|--------|-----------|--------|
+| **Feature drift** | KL divergence per feature | > 0.10 per feature | `drift_detected: true/false` per feature |
+| **Target drift** | KL divergence on `demand_count` | > 0.15 | `kl_divergence`, distribution stats |
+| **Performance drift** | MAE % increase (test vs. val) | > 20% | `mae_increase_pct`, `drift_detected` |
 
-The drift pipeline runs as a standalone function (`run_drift_detection_pipeline()`) that accepts reference data (training set) and current data (production window). It produces a structured report with per-dimension results, an overall drift flag, and a clear recommendation ("RETRAIN MODEL" or "Model is stable").
+Results are written to `processed/models/{run_id}/drift_report.json` and tagged to the MLflow run:
 
-An Airflow task wrapper (`drift_detection_task()`) is included for integration into the DAG when production data becomes available.
+```
+mlflow tag: drift_status = STABLE | ALERT
+mlflow tag: drift_feature_kl_max = <float>
+mlflow tag: drift_target_kl = <float>
+mlflow tag: drift_performance_mae_pct = <float>
+```
+
+When the deployment pipeline goes live, upgrade `ALERT` status to block promotion — the gate is already in place, just informational today.
 
 ---
 
 ## Tests
 
-29 unit tests covering the logic layer of every module. No GCS or MLflow credentials required — all external calls are mocked.
+17 unit tests covering the logic layer of every module. No GCS or MLflow credentials required — all external calls are mocked.
 
 ```bash
 # Run locally
-cd Model-Pipeline
-python -m pytest tests/test_model_pipeline.py -v
+python -m pytest Model-Pipeline/tests/test_model_pipeline.py -v
 ```
 
-| Module | Tests | What they check |
-|--------|-------|----------------|
-| **Schema validation** (3) | `test_schema_validation_passes`, `_fails_missing_col`, `_fails_nulls` | 29-column contract, RuntimeError on violations |
-| **Temporal split** (3) | `test_temporal_split_sizes`, `_ordering`, `_no_overlap` | Row count conservation, no temporal leakage, disjoint sets |
-| **Slice labelling** (3) | `test_time_of_day_labels`, `_capacity_labels`, `_precipitation_labels` | Correct categorical assignment for bias slicing |
-| **Disparity ratio** (2) | `test_disparity_ratio_calculation`, `_skips_small_groups` | Exact ratio math, min-sample exclusion |
-| **Evaluation gates** (2) | `test_threshold_check_passes`, `_fails_on_high_rmse` | Pass/fail logic for RMSE/R²/MAE thresholds |
-| **MAPE zero-mask** (1) | `test_metrics_mape_excludes_zero_demand` | MAPE computed only on y_true > 0 |
-| **Rollback gate** (2) | `test_rollback_gate_blocks`, `_passes` | 10% regression ceiling enforced |
-| **Prediction safety** (1) | `test_prediction_no_negatives` | np.maximum clips negatives to 0 |
-| **Optuna HPO** (3) | `test_optuna_returns_valid_params`, `_params_in_valid_ranges`, `_runs_with_small_subsample` | Correct keys returned, search space bounds respected, subsample works |
-| **Visualizations** (3) | `test_predicted_vs_actual_creates_plot`, `_residual_distribution_creates_plot`, `_bias_disparity_handles_empty_report` | GCS URI returned, graceful handling of empty data |
-| **Drift detection** (6) | `test_kl_divergence_identical_distributions`, `_different_distributions`, `_performance_drift_detects_degradation`, `_no_alert_when_stable`, `_feature_drift_detects_shifted_feature`, `_target_drift_stable_distribution` | KL math, MAE threshold logic, feature-level detection, false-positive avoidance |
+| Test | What it checks |
+|------|---------------|
+| `test_schema_validation_passes` | `_validate_schema()` accepts correct 29-column DataFrame |
+| `test_schema_validation_fails_missing_col` | Raises `RuntimeError` when a required column is missing |
+| `test_schema_validation_fails_nulls` | Raises `RuntimeError` when nulls are present |
+| `test_temporal_split_sizes` | Train + val + test row count == total, all splits non-empty |
+| `test_temporal_split_ordering` | Train max < val min < test min (no temporal leakage) |
+| `test_temporal_split_no_overlap` | Timestamp sets are fully disjoint |
+| `test_time_of_day_labels` | `[7, 13, 22]` → `['peak', 'off_peak', 'night']` |
+| `test_capacity_labels` | `[5, 15, 30]` → `['low', 'mid', 'high']` |
+| `test_precipitation_labels` | `[0.0, 2.5]` → `['dry', 'rainy']` |
+| `test_disparity_ratio_calculation` | RMSE `[1.0, 2.0, 3.0]` → ratio exactly 3.0 |
+| `test_disparity_ratio_skips_small_groups` | Group with < 1,000 samples excluded from ratio |
+| `test_threshold_check_passes` | Good metrics → all fields `True` in result dict |
+| `test_threshold_check_fails_on_high_rmse` | RMSE 3.0 > limit 2.5 → `rmse_passed=False`, `all_passed=False` |
+| `test_metrics_mape_excludes_zero_demand` | MAPE computed only on rows where `y_true > 0` |
+| `test_rollback_gate_blocks` | New `val_rmse=2.0` > champion `1.6 × 1.10` → `RegistryPromotionError` |
+| `test_rollback_gate_passes` | New `val_rmse=1.5` < ceiling → proceeds without error |
+| `test_prediction_no_negatives` | `np.maximum(preds, 0)` clips all negatives to 0 |
 
 ---
 
@@ -413,6 +388,23 @@ Contents: `exception_type`, `exception_message`, `traceback_tail` (last 20 lines
 
 Airflow container logs retain only `WARNING+` level, rolling 7-day window (`AIRFLOW__LOGGING__LOGGING_LEVEL: WARNING`, `AIRFLOW__LOG_RETENTION_DAYS: 7`).
 
+### Failure Alerts
+
+On any task failure, Airflow fires `on_failure_callback` which:
+1. Writes the crash JSON to GCS (see above)
+2. **Posts to Slack** if `SLACK_WEBHOOK_URL` is set in the environment
+
+Slack message format:
+```
+🚨 BlueForecast DAG FAILURE
+DAG: model_pipeline
+Task: train_and_evaluate
+Time: 2026-03-24T01:04:39Z
+Error: too many values to unpack (expected 2)
+```
+
+To enable: uncomment `SLACK_WEBHOOK_URL` in `docker-compose.yaml` and set your webhook URL. If the env var is not set, the alert silently falls back to log-only — the pipeline is never blocked by a missing webhook.
+
 ### GCS Lifecycle Rule
 
 Crash logs auto-delete after 30 days. Apply once:
@@ -435,83 +427,35 @@ gsutil lifecycle set lifecycle.json gs://bluebikes-demand-predictor-data
 
 ## CI/CD
 
-### CI/CD Jobs
-
-The GitHub Actions workflow (`.github/workflows/model_pipeline.yml`) defines 4 jobs:
-
-| Job | When it runs | What it does |
-|-----|-------------|-------------|
-| **Lint + Unit Tests** | Every push/PR touching `Model-Pipeline/**` | `ruff check` + `pytest` (29 tests) |
-| **Docker Build Verification** | Push to `main` only | `docker compose build --no-cache` |
-| **Model Training + Validation + Bias Detection** | Manual trigger (`workflow_dispatch`) with `run_training: true` | Trains on 5% sample → evaluates → bias check → sensitivity (SHAP) |
-| **Pipeline Notifications** | After every test run | Slack alert on failure, GitHub Issue fallback |
-
-### Pipeline Triggers
-
-| Trigger | Jobs that run |
-|---------|--------------|
-| Push to any branch touching `Model-Pipeline/**` | `test` |
+| Trigger | Jobs |
+|---------|------|
+| Push to any branch touching `Model-Pipeline/**` | `test` (lint + 17 unit tests) |
 | PR into `main` | `test` — **blocks merge if red** |
-| Push to `main` | `test` + `docker-build` |
+| Push to `main` | `test` + `docker-build` (build verification, no push) |
 | `Data-Pipeline/.../feature_engineering.py` changes | `test` — schema contract check |
-| `workflow_dispatch` with `run_training: false` | `test` only |
-| `workflow_dispatch` with `run_training: true` | `test` → `train` (full pipeline in CI) |
-
-### CI/CD Model Training
-
-The `train` job runs the complete model pipeline in CI when manually triggered:
+| `workflow_dispatch` | `test` (manual trigger) |
 
 ```
-workflow_dispatch (run_training: true)
-    └── test (lint + 29 unit tests)
-            └── train
-                 ├── Train model (5% sample for CI speed)
-                 ├── Evaluate on test set (RMSE/R²/MAE gates)
-                 ├── Bias detection (6 slice dimensions)
-                 └── Sensitivity analysis (SHAP + feature importance)
+ruff check Model-Pipeline/src/ Model-Pipeline/dags/
+    ↓
+pytest Model-Pipeline/tests/test_model_pipeline.py -v
+    ↓
+[main only] docker compose build --no-cache
 ```
 
-**How to trigger:**
-1. Go to GitHub → Actions → "Model Pipeline CI"
-2. Click **"Run workflow"**
-3. Set `Run model training` to `true` (optionally enable Optuna HPO)
-4. Click **"Run workflow"**
-
-**Requirements:** `GCP_SA_KEY_JSON` must be configured as a GitHub repository secret for GCS data access. Without this secret, the training job will fail at the GCP authentication step — the lint/test jobs still run independently.
-
-**Design decision:** Training is gated behind `workflow_dispatch` (not triggered on every push) because it requires GCP credentials and loads 8.2M rows from GCS. Full production training (100% data, 300+ trees) runs via the Airflow DAG on infrastructure with sufficient memory. The CI training job uses a 5% sample to verify the entire pipeline works end-to-end.
-
-### Notifications and Alerts
-
-**Slack notifications** (requires `SLACK_WEBHOOK_URL` secret in GitHub repo settings):
-- Failure on any branch: posts run details + link to logs
-- Success on `main`: confirms CI passed
-
-**GitHub Issue fallback** (always active, no setup required):
-- On any CI failure, a GitHub Issue is auto-created with the `ci-failure` and `model-pipeline` labels, including branch, commit, author, and a link to the failed run.
-
-**Runtime alerts** (Airflow pipeline):
-- `current.json` on GCS updated on every task start/completion — dashboard polls this file
-- Crash logs written to `processed/pipeline-logs/crashes/` on any task failure
-- Airflow alert callbacks log task ID, execution date, and exception on every failure
-
-**Setup secrets (one-time):**
-1. `SLACK_WEBHOOK_URL` — Create an incoming webhook at [api.slack.com/apps](https://api.slack.com/apps), add as GitHub secret
-2. `GCP_SA_KEY_JSON` — Export your GCP service account key as JSON, add as GitHub secret (required for CI training only)
+Full model retraining is **never auto-triggered in CI** — requires GCP credentials and 8.2M-row GCS access. Training is triggered manually via Airflow or `workflow_dispatch`.
 
 ---
 
 ## Key Design Decisions
 
-- **4 coarse-grained DAG tasks, not 8 micro-tasks** — loading 8.2M rows from GCS repeatedly is expensive. Logically related steps are grouped: validate / train+eval / bias+sensitivity+visualizations / register+predict.
+- **4 coarse-grained DAG tasks, not 8 micro-tasks** — loading 8.2M rows from GCS repeatedly is expensive. Logically related steps are grouped: validate / train+eval / bias+sensitivity / register+predict.
 
 - **XCom carries primitives only** — `run_id` (str), `val_rmse` (float), `bias_status` (str), `registry_version` (int). Never DataFrames. Each task re-loads from GCS or MLflow independently (stateless Airflow workers).
 
 - **Temporal split, never random** — shuffling an 8.2M-row time-series dataset would leak future lag features into training. Boundaries are hard date cuts: train `< 2024-07-01`, val `Jul–Sep 2024`, test `Oct–Dec 2024`.
 
 - **`BaseForecaster` ABC** — XGBoost is an implementation detail. Swapping to LightGBM or TFT means one new class; evaluator, bias detection, registry, and predictor code are unchanged.
-
-- **Optuna for joint HPO, OAT for interpretability** — Optuna explores interaction effects across 8 parameters simultaneously. OAT sweep remains for clear single-parameter sensitivity reporting. Both are optional and toggled via DAG config.
 
 - **Crash-only logging** — success runs produce zero persistent log artifacts. Only failures write to GCS. Reduces storage costs and noise. GCS lifecycle rule cleans up after 30 days.
 
@@ -521,10 +465,6 @@ workflow_dispatch (run_training: true)
 
 - **Station capacity is the priority bias slice** — the data pipeline found a 10.21× raw demand disparity across station sizes. The model narrows this to 2.96× RMSE disparity. Mitigation weights are implemented and will activate automatically if it crosses 3.0×.
 
-- **`sample_weight` wired end-to-end** — bias mitigation weights flow from `compute_mitigation_weights()` through `BaseForecaster.train()` to XGBoost's `.fit()`. MLflow tags track whether weights were applied.
-
-- **LabelEncoder persisted to GCS** — station ID encoding uses `sklearn.LabelEncoder` saved as a pickle to GCS (`processed/features/station_label_encoder.pkl`). This ensures consistent encoding between training and prediction, avoiding the non-determinism of `.astype("category").cat.codes`.
-
 - **MAPE excluded from gates** — too noisy on zero-demand hours (0÷0). Logged to MLflow as informational only.
 
 - **Docker build only on `main`** — building the full Airflow image takes ~10 min. Gated to post-merge only, not every PR push.
@@ -532,6 +472,14 @@ workflow_dispatch (run_training: true)
 - **Port 8082 for Airflow** — avoids clash with the Data Pipeline stack at 8081.
 
 - **MLflow backend: SQLite + GCS artifact root** — simple, self-contained, no extra managed services. Artifact root on GCS makes model artifacts durable and accessible to all pipeline workers.
+
+- **Bayesian optimization off by default** — Optuna TPE (50 trials) adds ~15 min to a run. Gated behind `run_bayesian_search: false` in DAG params so standard runs stay fast. Enable at trigger time when actively tuning.
+
+- **Drift detection is informational until live traffic** — the KL divergence + MAE gates are fully implemented and tagged to MLflow. Status is `STABLE | ALERT` but never blocks promotion today. When the deployment pipeline ships, upgrade one flag to make `ALERT` a hard gate.
+
+- **Visualizations are non-fatal** — chart generation (matplotlib → MLflow artifacts) is wrapped in try/except. A missing dependency or rendering error never crashes the pipeline; charts are a convenience, not a gate.
+
+- **Slack alerts degrade gracefully** — `SLACK_WEBHOOK_URL` is checked at runtime. If unset, the failure handler writes to GCS and logs the error without throwing. No webhook misconfiguration can silence the crash JSON.
 
 ---
 

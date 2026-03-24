@@ -23,6 +23,8 @@ x-airflow-common: &airflow-common
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG:         "true"
     # MLflow tracking URI points to the mlflow service
     MLFLOW_TRACKING_URI:                       http://mlflow:5000
+    # Slack failure alerts — set webhook URL to enable (leave commented to disable)
+    # SLACK_WEBHOOK_URL: ""
     # GCP
     GOOGLE_APPLICATION_CREDENTIALS:           /home/airflow/.config/gcloud/application_default_credentials.json
     GOOGLE_CLOUD_PROJECT:                      bluebikes-demand-predictor
@@ -37,9 +39,9 @@ x-airflow-common: &airflow-common
       pandas>=2.0.0
       numpy>=1.24.0
       pyarrow>=12.0.0
-      optuna>=3.5.0
+      optuna>=3.0.0
+      matplotlib>=3.7.0
       scipy>=1.11.0
-      matplotlib>=3.8.0
   volumes:
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src

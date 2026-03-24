@@ -136,7 +136,7 @@ def _build_station_histories(
     capacities = {}
 
     for sid, grp in tail.groupby("start_station_id"):
-        enc_sid = int(le.transform([sid])[0])
+        enc_sid = int(sid)   # already integer-encoded by load_feature_matrix()
         grp = grp.sort_values("hour")
         histories[enc_sid]  = list(grp["demand_count"].values.astype(float))
         capacities[enc_sid] = float(grp["capacity"].iloc[-1])
@@ -196,9 +196,10 @@ def generate_24h_forecasts(
     last_ts        = df["hour"].max()
     forecast_start = last_ts + pd.Timedelta(hours=1)
 
-    # Use encoded integer IDs (what the model was trained on)
-    orig_stations    = sorted(df["start_station_id"].unique())
-    encoded_stations = [int(le.transform([s])[0]) for s in orig_stations]
+    # start_station_id is already integer-encoded by load_feature_matrix().
+    # Use inverse_transform to recover original string IDs for output only.
+    encoded_stations = sorted(df["start_station_id"].unique().tolist())
+    orig_stations    = le.inverse_transform(encoded_stations)          # str labels for output
     encoded_to_orig  = dict(zip(encoded_stations, orig_stations))
 
     logger.info(
@@ -325,7 +326,7 @@ def run_prediction_pipeline() -> pd.DataFrame:
     _setup_mlflow()
 
     model, version_num, run_id = load_champion_model()
-    df, _                      = load_feature_matrix()
+    df, _, _                   = load_feature_matrix()   # (df, version_hash, le) — le reloaded from GCS below
 
     # Fit LabelEncoder on full feature matrix (same station universe as training)
     enc_blob = storage.Client().bucket(BUCKET).blob("processed/features/station_label_encoder.pkl")
