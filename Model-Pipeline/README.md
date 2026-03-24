@@ -11,8 +11,8 @@ Data Pipeline  ──►  feature_matrix.parquet (GCS)
                             │
                             ▼
               ┌─────────────────────────────┐
-              │      Model Pipeline          │
-              │    (Airflow + MLflow)        │
+              │      Model Pipeline         │
+              │    (Airflow + MLflow)       │
               │                             │
               │  t1: validate_data_input    │
               │  t2: train_and_evaluate     │
