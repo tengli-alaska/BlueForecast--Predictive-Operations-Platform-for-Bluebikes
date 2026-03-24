@@ -1,8 +1,8 @@
 """
 BlueForecast sensitivity analysis runner.
 
-Pass 1: skip_hyperparam_sweep=True  -> SHAP + feature importance only (~3 min)
-Pass 2: skip_hyperparam_sweep=False -> adds hyperparameter sweep (~20 min)
+Pass 1: SKIP_SWEEP=True  -> SHAP + feature importance only (~3 min)
+Pass 2: SKIP_SWEEP=False -> adds hyperparameter sweep (~20 min)
 """
 
 import sys, logging
@@ -10,7 +10,6 @@ logging.basicConfig(level=logging.INFO, format="%(name)s - %(message)s")
 sys.path.insert(0, "src")
 
 import mlflow, mlflow.xgboost
-from sklearn.preprocessing import LabelEncoder
 
 from model_pipeline.data_loader  import load_feature_matrix, get_X_y, FEATURE_COLS
 from model_pipeline.splitter     import temporal_split
@@ -18,14 +17,11 @@ from model_pipeline.trainer      import XGBoostForecaster, DEFAULT_PARAMS, _setu
 from model_pipeline.sensitivity  import run_sensitivity_analysis
 
 # ── Toggle ───────────────────────────────────────────────────────────────────
-SKIP_SWEEP = False  # False for Pass 2
+SKIP_SWEEP = True  # True for fast pass, False for full sweep
 # ─────────────────────────────────────────────────────────────────────────────
 
-# 1. Load + encode station IDs
-df, version_hash = load_feature_matrix()
-le = LabelEncoder()
-df["start_station_id"] = le.fit_transform(df["start_station_id"])
-print(f"Encoded {len(le.classes_)} station IDs (0-{len(le.classes_)-1})")
+# 1. Load data (LabelEncoder handled inside data_loader)
+df, version_hash, _le = load_feature_matrix()
 
 train_df, val_df, test_df = temporal_split(df)
 X_train, y_train = get_X_y(train_df)
@@ -86,7 +82,7 @@ print(f"\nFeature importance -> GCS: {report['artifact_uris']['feature_importanc
 # ── Print hyperparam sweep results (Pass 2 only) ─────────────────────────────
 if not SKIP_SWEEP:
     ha = report["hyperparam_analysis"]
-    print(f"\n=== Hyperparameter Sensitivity (trained on {int(ha['sweep_sample_frac']*100)}% of train data) ===")
+    print(f"\n=== Hyperparameter Sensitivity ({int(ha['sweep_sample_frac']*100)}% of train data) ===")
     print(f"Most sensitive parameter: {ha['most_sensitive_param']}\n")
 
     for param, data in ha["parameters"].items():

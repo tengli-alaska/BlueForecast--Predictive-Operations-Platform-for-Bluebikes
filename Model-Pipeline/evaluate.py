@@ -9,19 +9,14 @@ sys.path.insert(0, "src")
 
 import mlflow
 import mlflow.xgboost
-from sklearn.preprocessing import LabelEncoder
 
 from model_pipeline.data_loader import load_feature_matrix, get_X_y, FEATURE_COLS
 from model_pipeline.splitter    import temporal_split
 from model_pipeline.trainer     import XGBoostForecaster, _setup_mlflow
-from model_pipeline.evaluate    import evaluate_on_test, VALIDATION_THRESHOLDS
+from model_pipeline.evaluator   import evaluate_on_test, VALIDATION_THRESHOLDS
 
-# 1. Load data + encode station IDs (must match training encoding)
-df, version_hash = load_feature_matrix()
-
-le = LabelEncoder()
-df["start_station_id"] = le.fit_transform(df["start_station_id"])
-print(f"Encoded {len(le.classes_)} station IDs (0-{len(le.classes_)-1})")
+# 1. Load data (LabelEncoder handled inside data_loader)
+df, version_hash, _le = load_feature_matrix()
 
 _, _, test_df = temporal_split(df)
 X_test, y_test = get_X_y(test_df)
