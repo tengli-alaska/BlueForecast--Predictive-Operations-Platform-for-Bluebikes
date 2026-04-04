@@ -1,0 +1,21 @@
+version: "3.8"
+services:
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      - GCS_BUCKET=bluebikes-demand-predictor-data
+    volumes:
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+    restart: unless-stopped
+
+  dashboard:
+    build: ./next-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api:8000
+    depends_on:
+      - api
+    restart: unless-stopped
