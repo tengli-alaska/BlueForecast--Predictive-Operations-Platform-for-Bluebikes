@@ -1,5 +1,6 @@
 import logging
 import math
+import os
 from typing import Any, Optional
 
 import numpy as np
@@ -29,9 +30,15 @@ app = FastAPI(
     version="0.1.0",
 )
 
+_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    os.getenv("DASHBOARD_URL", ""),  # Cloud Run frontend URL injected at deploy time
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[o for o in _ALLOWED_ORIGINS if o],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
