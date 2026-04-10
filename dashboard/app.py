@@ -198,11 +198,11 @@ def load_hourly_forecast(station_id: str):
 
     base = 3 + 4 * np.abs(np.sin(np.pi * np.arange(49) / 12))  # diurnal pattern
     xgb_pred = np.clip(base + np.random.normal(0, 0.6, 49), 0, None).round(1)
-    actuals = np.where(
-        np.arange(49) < 24,
+    actuals_full = np.concatenate([
         np.clip(xgb_pred[:24] + np.random.normal(0, 0.8, 24), 0, None).round(1),
-        np.nan
-    )
+        np.full(25, np.nan)
+    ])
+    actuals = np.where(np.arange(49) < 24, actuals_full, np.nan)
 
     return pd.DataFrame({
         "datetime": hours,
@@ -475,13 +475,7 @@ with col_fc:
             name="Actual"
         ))
 
-        # Now line
-        fig_fc.add_vline(
-            x=fc["datetime"][now_idx], line_dash="dash",
-            line_color="#FF3B30", line_width=1.5,
-            annotation_text="NOW", annotation_font_size=10,
-            annotation_font_color="#FF3B30"
-        )
+
 
         fig_fc.update_layout(
             height=320,
@@ -491,7 +485,7 @@ with col_fc:
             xaxis=dict(showgrid=False, tickfont=dict(size=10, family="DM Mono"),
                        tickformat="%a %H:%M", nticks=10),
             yaxis=dict(showgrid=True, gridcolor="#EEF1F8",
-                       title="Trips / Hour", titlefont=dict(size=11),
+                       title=dict(text="Trips / Hour", font=dict(size=11)),
                        tickfont=dict(size=10, family="DM Mono"), zeroline=False),
             legend=dict(orientation="h", y=-0.18, font=dict(size=11)),
             font=dict(family="DM Sans"),
