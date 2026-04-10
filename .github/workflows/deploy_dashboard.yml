@@ -76,6 +76,7 @@ jobs:
             --cpu=1 \
             --min-instances=0 \
             --max-instances=3 \
+            --port=8000 \
             --set-env-vars="GCS_BUCKET=bluebikes-demand-predictor-data,GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }}" \
             --quiet
 
