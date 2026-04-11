@@ -161,6 +161,17 @@ export async function getPipelineStatus(): Promise<{ data: PipelineStatus; isLiv
   return { data: mockPipelineStatus, isLive: false };
 }
 
+/**
+ * Fetch the station ID mapping produced by the feature engineering pipeline.
+ * Maps A32xxx operational IDs (used in predictions) → GBFS UUIDs (used in stations).
+ * Returns null entries if the pipeline hasn't run yet (fallback: skip per-station filtering).
+ */
+export async function getStationMapping(): Promise<{ start_station_id: string; gbfs_station_id: string | null }[]> {
+  const raw = await fetchJson("/api/station-mapping", null);
+  if (Array.isArray(raw) && raw.length > 0) return raw;
+  return [];
+}
+
 export async function getStationStatuses(): Promise<StationStatus[]> {
   return mockStationStatuses;
 }

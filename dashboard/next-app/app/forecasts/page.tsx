@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { MapPin, Clock, BarChart3, Crosshair, Layers } from "lucide-react";
+import { MapPin, BarChart3, Crosshair } from "lucide-react";
 import ForecastLineChart from "@/components/charts/ForecastLineChart";
 import ScrollReveal from "@/components/shared/ScrollReveal";
 import TextReveal from "@/components/shared/TextReveal";
-import { getStations, getPredictions } from "@/data";
+import { getStations, getPredictions, getStationMapping } from "@/data";
 import { formatHour, formatNumber, getDemandColor } from "@/lib/utils";
 import type { Station, Prediction } from "@/types";
 
@@ -23,27 +23,46 @@ export default function ForecastsPage() {
   const [stations, setStations] = useState<Station[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStationId, setSelectedStationId] = useState("");
-  const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [allPredictions, setAllPredictions] = useState<Prediction[]>([]);
+  // Maps GBFS station_id → A32xxx start_station_id used in predictions
+  const [stationMapping, setStationMapping] = useState<Record<string, string>>({});
 
-  // Load stations on mount
+  // Load stations and station ID mapping on mount
   useEffect(() => {
-    getStations().then(({ data }) => {
+    Promise.all([getStations(), getStationMapping()]).then(([{ data }, mapping]) => {
       setStations(data);
-      if (data.length > 0) {
-        setSelectedStationId(data[0].station_id);
+      if (data.length > 0) setSelectedStationId(data[0].station_id);
+      // Build reverse lookup: gbfs_station_id → start_station_id
+      const lookup: Record<string, string> = {};
+      for (const row of mapping) {
+        if (row.gbfs_station_id) lookup[row.gbfs_station_id] = row.start_station_id;
       }
+      setStationMapping(lookup);
     }).finally(() => setLoading(false));
   }, []);
 
-  // Load all predictions on mount (station IDs differ between stations and predictions datasets)
+  // Load all predictions once (filter client-side using the mapping)
   useEffect(() => {
-    getPredictions().then(({ data }) => setPredictions(data));
+    getPredictions().then(({ data }) => setAllPredictions(data));
   }, []);
 
   const selectedStation = useMemo(
     () => stations.find((s) => s.station_id === selectedStationId),
     [stations, selectedStationId]
   );
+
+  // Filter predictions for the selected station using the ID mapping when available
+  const predictions = useMemo(() => {
+    const tripId = stationMapping[selectedStationId];
+    if (tripId) {
+      // We have a mapping — filter to this station's A32xxx ID
+      const filtered = allPredictions.filter((p) => (p as any).station_id === tripId);
+      // Fall back to all predictions if the mapped ID yields nothing (pipeline not re-run yet)
+      return filtered.length > 0 ? filtered : allPredictions;
+    }
+    // No mapping available yet (pipeline hasn't run) — show all predictions
+    return allPredictions;
+  }, [allPredictions, selectedStationId, stationMapping]);
 
   const peakDemand = useMemo(
     () =>
