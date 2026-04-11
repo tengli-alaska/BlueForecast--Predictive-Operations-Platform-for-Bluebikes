@@ -102,8 +102,8 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getPipelineStatus().then((p) => {
-      setPipeline(p);
+    getPipelineStatus().then(({ data }) => {
+      setPipeline(data);
     }).finally(() => setLoading(false));
   }, []);
 

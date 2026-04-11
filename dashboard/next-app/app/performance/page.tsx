@@ -49,8 +49,8 @@ export default function PerformancePage() {
     Promise.all([
       getModelMetrics(),
       getLatestMetrics(),
-    ]).then(([allMetrics, latest]) => {
-      setData({ allMetrics, latest });
+    ]).then(([allMetrics, latestResult]) => {
+      setData({ allMetrics, latest: latestResult.data });
     }).finally(() => setLoading(false));
   }, []);
 
