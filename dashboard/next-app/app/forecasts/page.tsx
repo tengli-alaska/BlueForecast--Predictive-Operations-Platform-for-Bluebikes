@@ -27,10 +27,10 @@ export default function ForecastsPage() {
 
   // Load stations on mount
   useEffect(() => {
-    getStations().then((s) => {
-      setStations(s);
-      if (s.length > 0) {
-        setSelectedStationId(s[0].station_id);
+    getStations().then(({ data }) => {
+      setStations(data);
+      if (data.length > 0) {
+        setSelectedStationId(data[0].station_id);
       }
     }).finally(() => setLoading(false));
   }, []);
@@ -38,7 +38,7 @@ export default function ForecastsPage() {
   // Load predictions when station changes
   useEffect(() => {
     if (!selectedStationId) return;
-    getPredictions(selectedStationId).then(setPredictions);
+    getPredictions(selectedStationId).then(({ data }) => setPredictions(data));
   }, [selectedStationId]);
 
   const selectedStation = useMemo(

@@ -21,8 +21,8 @@ export default function StationsPage() {
     Promise.all([
       getStations(),
       getPredictions(),
-    ]).then(([stations, predictions]) => {
-      setData({ stations, predictions });
+    ]).then(([stationsResult, predictionsResult]) => {
+      setData({ stations: stationsResult.data, predictions: predictionsResult.data });
     }).finally(() => setLoading(false));
   }, []);
 
