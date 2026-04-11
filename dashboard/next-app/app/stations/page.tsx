@@ -60,6 +60,28 @@ export default function StationsPage() {
         </div>
       </motion.div>
 
+      {/* Legend */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2 }}
+        className="flex items-center gap-4 text-[11px] text-slate-500 flex-wrap"
+      >
+        <span className="font-medium text-slate-400">Predicted demand:</span>
+        {[
+          { color: "#ef4444", label: "Very high (5+ trips/hr) — stock up now" },
+          { color: "#f97316", label: "High (3–5)" },
+          { color: "#eab308", label: "Moderate (1–3)" },
+          { color: "#22c55e", label: "Low (0.5–1)" },
+          { color: "#3b82f6", label: "Very low (<0.5)" },
+        ].map(({ color, label }) => (
+          <div key={color} className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+            <span>{label}</span>
+          </div>
+        ))}
+      </motion.div>
+
       {/* Map — full prominence */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}

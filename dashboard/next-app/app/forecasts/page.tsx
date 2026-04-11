@@ -190,20 +190,29 @@ export default function ForecastsPage() {
               <div className="flex justify-between items-center bg-white/[0.03] rounded-lg px-3 py-2">
                 <span className="text-xs text-text-secondary">Peak Demand</span>
                 <span className="text-sm font-semibold text-text-primary">
-                  {formatNumber(peakDemand, 2)} trips/hr
+                  {formatNumber(peakDemand, 1)} trips/hr
                 </span>
               </div>
               <div className="flex justify-between items-center bg-white/[0.03] rounded-lg px-3 py-2">
                 <span className="text-xs text-text-secondary">Avg Demand</span>
                 <span className="text-sm font-semibold text-text-primary">
-                  {formatNumber(avgDemand, 2)} trips/hr
+                  {formatNumber(avgDemand, 1)} trips/hr
                 </span>
               </div>
               <div className="flex justify-between items-center bg-white/[0.03] rounded-lg px-3 py-2">
-                <span className="text-xs text-text-secondary">Forecast Hours</span>
+                <span className="text-xs text-text-secondary">Recommended Stock</span>
                 <span className="text-sm font-semibold text-text-primary">
-                  {predictions.length}
+                  {Math.ceil(peakDemand * 1.5)} bikes at peak
                 </span>
+              </div>
+              <div className="rounded-lg px-3 py-2 bg-blue-500/[0.07] border border-blue-500/10">
+                <p className="text-[11px] text-blue-300/80 leading-relaxed">
+                  {peakDemand >= 5
+                    ? "⚠ High demand expected — ensure full stock before peak hour"
+                    : peakDemand >= 2
+                    ? "Moderate demand — monitor and top up if below 40% capacity"
+                    : "Low demand — no immediate action needed"}
+                </p>
               </div>
             </div>
           </motion.div>
@@ -242,8 +251,11 @@ export default function ForecastsPage() {
                   <th className="px-4 py-3 text-right text-[11px] font-semibold text-text-secondary uppercase tracking-wider sticky top-0">
                     Predicted Demand
                   </th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold text-text-secondary uppercase tracking-wider sticky top-0">
+                    Level
+                  </th>
                   <th className="px-4 py-3 text-right text-[11px] font-semibold text-text-secondary uppercase tracking-wider rounded-tr-lg sticky top-0">
-                    Model Version
+                    Action
                   </th>
                 </tr>
               </thead>
@@ -269,8 +281,16 @@ export default function ForecastsPage() {
                         {formatNumber(p.predicted_demand, 2)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-text-secondary">
-                      v{p.model_version}
+                    <td className="px-4 py-3 text-right">
+                      <span className={`text-[11px] font-medium ${
+                        p.predicted_demand >= 5 ? "text-red-400" :
+                        p.predicted_demand >= 2 ? "text-amber-400" : "text-emerald-400"
+                      }`}>
+                        {p.predicted_demand >= 5 ? "High" : p.predicted_demand >= 2 ? "Moderate" : "Quiet"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-[11px] text-slate-500">
+                      {p.predicted_demand >= 5 ? "Stock up" : p.predicted_demand >= 2 ? "Monitor" : "—"}
                     </td>
                   </motion.tr>
                 ))}

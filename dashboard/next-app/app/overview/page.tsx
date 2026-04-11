@@ -126,14 +126,14 @@ export default function OverviewPage() {
       {/* Bento Grid — asymmetric layout */}
       <div className="grid grid-cols-12 gap-3">
 
-        {/* ---- Row 1: Key metrics (not in cards — just numbers) ---- */}
+        {/* ---- Row 1: Ops-friendly KPIs ---- */}
         <motion.div
           custom={0} variants={fade} initial="hidden" animate="visible"
           className="col-span-3 rounded-xl bg-[#0f1520] p-4"
         >
-          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">RMSE</p>
+          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Prediction Accuracy</p>
           <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
-            <AnimatedCounter value={latest.test_rmse} decimals={4} />
+            ±<AnimatedCounter value={latest.test_rmse} decimals={1} suffix=" trips/hr" />
           </p>
           <div className="flex items-center gap-1 mt-1.5">
             {latest.test_rmse < prevMetrics.test_rmse ? (
@@ -142,7 +142,7 @@ export default function OverviewPage() {
               <ArrowUpRight className="h-3 w-3 text-red-400/60" />
             )}
             <span className="text-[11px] text-slate-500">
-              {Math.abs(((latest.test_rmse - prevMetrics.test_rmse) / prevMetrics.test_rmse) * 100).toFixed(1)}% from prev
+              Typical forecast error · {latest.test_rmse < 1.5 ? "Good" : latest.test_rmse < 2.5 ? "Acceptable" : "Review needed"}
             </span>
           </div>
         </motion.div>
@@ -151,13 +151,15 @@ export default function OverviewPage() {
           custom={1} variants={fade} initial="hidden" animate="visible"
           className="col-span-3 rounded-xl bg-[#0f1520] p-4"
         >
-          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Accuracy (R²)</p>
+          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Demand Explained</p>
           <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
-            <AnimatedCounter value={latest.test_r2 * 100} decimals={1} suffix="%" />
+            <AnimatedCounter value={latest.test_r2 * 100} decimals={0} suffix="%" />
           </p>
           <div className="flex items-center gap-1 mt-1.5">
             <ArrowUpRight className="h-3 w-3 text-emerald-400/60" />
-            <span className="text-[11px] text-slate-500">Explains {(latest.test_r2 * 100).toFixed(0)}% of variance</span>
+            <span className="text-[11px] text-slate-500">
+              Model captures {(latest.test_r2 * 100).toFixed(0)}% of demand patterns
+            </span>
           </div>
         </motion.div>
 
@@ -165,14 +167,16 @@ export default function OverviewPage() {
           custom={2} variants={fade} initial="hidden" animate="visible"
           className="col-span-3 rounded-xl bg-[#0f1520] p-4"
         >
-          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Stations at Risk</p>
+          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Stations Need Action</p>
           <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
             <AnimatedCounter value={criticalCount} decimals={0} />
             <span className="text-sm text-slate-500 font-normal ml-1">/ {stationStatuses.length}</span>
           </p>
           <div className="flex items-center gap-1 mt-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-red-400/80" />
-            <span className="text-[11px] text-slate-500">Need rebalancing now</span>
+            <span className="text-[11px] text-slate-500">
+              {criticalCount === 0 ? "All stations healthy" : "Send trucks to rebalancing page"}
+            </span>
           </div>
         </motion.div>
 
