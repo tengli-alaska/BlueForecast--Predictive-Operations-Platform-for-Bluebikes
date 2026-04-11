@@ -103,7 +103,7 @@ async def health():
 @app.get("/api/stations")
 async def get_stations():
     """Return all stations from stations.parquet."""
-    df = gcs.read_parquet("processed/stations.parquet", ttl=3600)
+    df = gcs.read_parquet("processed/stations/stations.parquet", ttl=3600)
     if df is None:
         return JSONResponse(
             status_code=503,
@@ -115,7 +115,7 @@ async def get_stations():
 @app.get("/api/predictions")
 async def get_predictions(station_id: Optional[str] = Query(None)):
     """Return demand predictions, optionally filtered by station_id."""
-    df = gcs.read_parquet("processed/predictions/latest.parquet", ttl=300)
+    df = gcs.read_parquet("processed/predictions/latest/predictions.parquet", ttl=300)
     if df is None:
         return JSONResponse(
             status_code=503,
@@ -201,7 +201,7 @@ async def get_drift_report():
 @app.get("/api/pipeline-status")
 async def get_pipeline_status():
     """Return current pipeline execution status."""
-    data = gcs.read_json("pipeline-status/current.json", ttl=30)
+    data = gcs.read_json("processed/pipeline-status/current.json", ttl=30)
     if data is None:
         return JSONResponse(
             status_code=503,
