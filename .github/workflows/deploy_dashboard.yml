@@ -47,7 +47,9 @@ jobs:
         working-directory: dashboard/next-app
         run: |
           IMAGE=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.DASHBOARD_SERVICE }}:${{ github.sha }}
-          docker build -t $IMAGE .
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=https://blueforecast-api-mem5htpgca-ue.a.run.app \
+            -t $IMAGE .
           docker push $IMAGE
           echo "DASHBOARD_IMAGE=$IMAGE" >> $GITHUB_ENV
 
