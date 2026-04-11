@@ -99,15 +99,15 @@ The TopBar shows a global green "Live data" / amber "Demo data" indicator based 
 
 | Page | Route | Data Source | Live? | DataBadge? | Notes |
 |---|---|---|---|---|---|
-| Overview | `/overview` | `getLatestMetrics`, `getStations`, `getBiasReport`, `getDriftReport`, `getPipelineStatus` | ✅ Mostly live | ✅ Yes | `getModelMetrics` (trend chart) and `getDemandHeatmap` and `getStationStatuses` are **still mock** |
-| Stations | `/stations` | `getStations`, `getPredictions` | ✅ Live | ❌ No badge | No DataBadge component added yet |
-| Forecasts | `/forecasts` | `getStations`, `getPredictions`, `getStationMapping` | ✅ Live | ❌ No badge | Per-station filtering works once `station_id_mapping.parquet` exists in GCS |
-| Rebalancing | `/rebalancing` | `getStations`, `getPredictions` | ✅ Live | ✅ Yes | Route suggestions are AI-generated labels only — not real dispatch |
-| Performance | `/performance` | `getLatestMetrics`, `getModelMetrics` | ⚠️ Partial | ❌ No badge | `getLatestMetrics` is live; `getModelMetrics` (history trend) is **mock** |
+| Overview | `/overview` | `getLatestMetrics`, `getStations`, `getBiasReport`, `getDriftReport`, `getPipelineStatus` | ✅ Mostly live | ✅ Yes | `getModelMetrics` (trend chart), `getDemandHeatmap`, and `getStationStatuses` are **still mock**. `getBiasReport`/`getDriftReport` are live but `isLive` not tracked for them — badge only reflects metrics/pipeline/stations |
+| Stations | `/stations` | `getStations`, `getPredictions` | ✅ Live | ❌ No badge | Data is real from GCS; DataBadge not added yet |
+| Forecasts | `/forecasts` | `getStations`, `getPredictions`, `getStationMapping` | ✅ Live | ❌ No badge | Per-station filtering works once `station_id_mapping.parquet` exists in GCS; until then shows network-wide predictions |
+| Rebalancing | `/rebalancing` | `getStations`, `getPredictions` (live) + `mockStationStatuses`, `mockRebalancingRoutes` (mock) | ⚠️ Partial | ✅ Yes | Station/prediction data is live; risk levels and route suggestions are derived from mock statuses. Routes are labeled "AI-Suggested — not dispatched" |
+| Performance | `/performance` | `getLatestMetrics`, `getModelMetrics` | ⚠️ Partial | ❌ No badge | `getLatestMetrics` is live (GCS); `getModelMetrics` trend history is **mock** |
 | Features | `/features` | `getFeatureImportance` | ❌ Mock only | ❌ No badge | No API endpoint for SHAP values — all mock data |
-| Bias | `/bias` | `getBiasReport` | ✅ Live | ❌ No badge | Reads real bias_report.json from GCS |
-| Drift | `/drift` | `getDriftReport` | ✅ Live | ❌ No badge | Reads real drift_report.json from GCS |
-| Pipeline | `/pipeline` | `getPipelineStatus` | ✅ Live | ❌ No badge | Reads current.json from GCS |
+| Bias | `/bias` | `getBiasReport` | ✅ Live | ❌ No badge | Reads real `bias_report.json` from GCS; no `isLive` tracking or badge |
+| Drift | `/drift` | `getDriftReport` | ✅ Live | ❌ No badge | Reads real `drift_report.json` from GCS; no `isLive` tracking or badge |
+| Pipeline | `/pipeline` | `getPipelineStatus` | ✅ Live | ❌ No badge | Reads `current.json` from GCS; no badge |
 
 ### Summary: What is actually Mock data right now
 
