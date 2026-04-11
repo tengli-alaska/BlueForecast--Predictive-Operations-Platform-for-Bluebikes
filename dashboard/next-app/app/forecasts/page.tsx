@@ -35,11 +35,10 @@ export default function ForecastsPage() {
     }).finally(() => setLoading(false));
   }, []);
 
-  // Load predictions when station changes
+  // Load all predictions on mount (station IDs differ between stations and predictions datasets)
   useEffect(() => {
-    if (!selectedStationId) return;
-    getPredictions(selectedStationId).then(({ data }) => setPredictions(data));
-  }, [selectedStationId]);
+    getPredictions().then(({ data }) => setPredictions(data));
+  }, []);
 
   const selectedStation = useMemo(
     () => stations.find((s) => s.station_id === selectedStationId),
@@ -130,7 +129,7 @@ export default function ForecastsPage() {
           <div className="lg:col-span-2">
             <ForecastLineChart
               data={predictions}
-              stationName={selectedStation?.station_name}
+              stationName="Network-wide demand forecast"
             />
           </div>
 
