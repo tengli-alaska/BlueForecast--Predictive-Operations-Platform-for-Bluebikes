@@ -5,9 +5,11 @@ import { motion } from "framer-motion";
 import { ArrowUp, ArrowDown } from "lucide-react";
 import AnimatedCounter from "@/components/shared/AnimatedCounter";
 import StatusBadge from "@/components/shared/StatusBadge";
+import DataBadge from "@/components/shared/DataBadge";
 import RebalancingMapWrapper from "@/components/map/RebalancingMapWrapper";
-import { getStations } from "@/data";
-import type { Station, StationStatus, RebalancingRoute } from "@/types";
+import { getStations, getPredictions } from "@/data";
+import { mockStationStatuses, mockRebalancingRoutes } from "@/data/mock/rebalancing";
+import type { Station, Prediction, StationStatus, RebalancingRoute } from "@/types";
 
 /* ------------------------------------------------------------------ */
 /*  Animations                                                         */
@@ -23,31 +25,8 @@ const fadeUp = {
 };
 
 /* ------------------------------------------------------------------ */
-/*  Mock data — inline until backend is wired                          */
+/*  AI-suggested routes (clearly labeled as such)                     */
 /* ------------------------------------------------------------------ */
-const STATION_STATUSES: StationStatus[] = [
-  { station_id: "A32001", current_bikes: 2,  capacity: 24, fill_pct: 8,  predicted_demand_1h: 6.2, predicted_demand_6h: 18.4, risk_level: "critical", net_flow_1h: -4 },
-  { station_id: "A32006", current_bikes: 3,  capacity: 30, fill_pct: 10, predicted_demand_1h: 8.1, predicted_demand_6h: 22.0, risk_level: "critical", net_flow_1h: -5 },
-  { station_id: "A32035", current_bikes: 4,  capacity: 28, fill_pct: 14, predicted_demand_1h: 5.8, predicted_demand_6h: 15.2, risk_level: "critical", net_flow_1h: -3 },
-  { station_id: "A32036", current_bikes: 27, capacity: 30, fill_pct: 90, predicted_demand_1h: 1.2, predicted_demand_6h: 4.1,  risk_level: "surplus",  net_flow_1h: 6 },
-  { station_id: "A32038", current_bikes: 24, capacity: 26, fill_pct: 92, predicted_demand_1h: 0.8, predicted_demand_6h: 3.5,  risk_level: "surplus",  net_flow_1h: 5 },
-  { station_id: "A32007", current_bikes: 25, capacity: 28, fill_pct: 89, predicted_demand_1h: 1.0, predicted_demand_6h: 5.0,  risk_level: "surplus",  net_flow_1h: 4 },
-  { station_id: "A32009", current_bikes: 5,  capacity: 24, fill_pct: 21, predicted_demand_1h: 4.5, predicted_demand_6h: 12.8, risk_level: "low",      net_flow_1h: -3 },
-  { station_id: "A32030", current_bikes: 6,  capacity: 26, fill_pct: 23, predicted_demand_1h: 4.0, predicted_demand_6h: 11.5, risk_level: "low",      net_flow_1h: -2 },
-  { station_id: "A32049", current_bikes: 5,  capacity: 24, fill_pct: 21, predicted_demand_1h: 3.9, predicted_demand_6h: 10.2, risk_level: "low",      net_flow_1h: -3 },
-  { station_id: "A32002", current_bikes: 12, capacity: 20, fill_pct: 60, predicted_demand_1h: 2.1, predicted_demand_6h: 7.4,  risk_level: "moderate", net_flow_1h: 1 },
-  { station_id: "A32003", current_bikes: 10, capacity: 18, fill_pct: 56, predicted_demand_1h: 1.8, predicted_demand_6h: 6.0,  risk_level: "moderate", net_flow_1h: 0 },
-  { station_id: "A32011", current_bikes: 11, capacity: 22, fill_pct: 50, predicted_demand_1h: 1.5, predicted_demand_6h: 5.2,  risk_level: "moderate", net_flow_1h: 1 },
-  { station_id: "A32016", current_bikes: 9,  capacity: 20, fill_pct: 45, predicted_demand_1h: 2.0, predicted_demand_6h: 6.8,  risk_level: "moderate", net_flow_1h: 0 },
-  { station_id: "A32021", current_bikes: 15, capacity: 20, fill_pct: 75, predicted_demand_1h: 1.3, predicted_demand_6h: 4.5,  risk_level: "moderate", net_flow_1h: 2 },
-  { station_id: "A32026", current_bikes: 14, capacity: 22, fill_pct: 64, predicted_demand_1h: 1.6, predicted_demand_6h: 5.8,  risk_level: "moderate", net_flow_1h: 1 },
-  { station_id: "A32031", current_bikes: 8,  capacity: 24, fill_pct: 33, predicted_demand_1h: 2.8, predicted_demand_6h: 8.5,  risk_level: "low",      net_flow_1h: -1 },
-  { station_id: "A32040", current_bikes: 16, capacity: 20, fill_pct: 80, predicted_demand_1h: 0.9, predicted_demand_6h: 3.2,  risk_level: "moderate", net_flow_1h: 2 },
-  { station_id: "A32043", current_bikes: 7,  capacity: 16, fill_pct: 44, predicted_demand_1h: 1.4, predicted_demand_6h: 4.0,  risk_level: "moderate", net_flow_1h: 0 },
-  { station_id: "A32046", current_bikes: 18, capacity: 22, fill_pct: 82, predicted_demand_1h: 1.1, predicted_demand_6h: 3.8,  risk_level: "surplus",  net_flow_1h: 3 },
-  { station_id: "A32008", current_bikes: 7,  capacity: 26, fill_pct: 27, predicted_demand_1h: 3.5, predicted_demand_6h: 9.8,  risk_level: "low",      net_flow_1h: -2 },
-];
-
 const ROUTES: RebalancingRoute[] = [
   {
     route_id: "route-alpha",
@@ -57,11 +36,11 @@ const ROUTES: RebalancingRoute[] = [
     bikes_moved: 18,
     status: "active",
     stops: [
-      { station_id: "A32036", station_name: "South Station",                lat: 42.3523, lon: -71.0551, action: "pickup",  bikes: 8,  order: 1 },
-      { station_id: "A32001", station_name: "Back Bay / Stuart St",         lat: 42.3484, lon: -71.0762, action: "dropoff", bikes: 5,  order: 2 },
-      { station_id: "A32035", station_name: "Downtown Crossing",            lat: 42.3555, lon: -71.0604, action: "dropoff", bikes: 3,  order: 3 },
-      { station_id: "A32038", station_name: "Boston Common",                lat: 42.3560, lon: -71.0641, action: "pickup",  bikes: 6,  order: 4 },
-      { station_id: "A32009", station_name: "Kendall/MIT T Station",        lat: 42.3625, lon: -71.0862, action: "dropoff", bikes: 6,  order: 5 },
+      { station_id: "A32036", station_name: "South Station",         lat: 42.3523, lon: -71.0551, action: "pickup",  bikes: 8, order: 1 },
+      { station_id: "A32001", station_name: "Back Bay / Stuart St",  lat: 42.3484, lon: -71.0762, action: "dropoff", bikes: 5, order: 2 },
+      { station_id: "A32035", station_name: "Downtown Crossing",     lat: 42.3555, lon: -71.0604, action: "dropoff", bikes: 3, order: 3 },
+      { station_id: "A32038", station_name: "Boston Common",         lat: 42.3560, lon: -71.0641, action: "pickup",  bikes: 6, order: 4 },
+      { station_id: "A32009", station_name: "Kendall/MIT T Station", lat: 42.3625, lon: -71.0862, action: "dropoff", bikes: 6, order: 5 },
     ],
   },
   {
@@ -72,11 +51,11 @@ const ROUTES: RebalancingRoute[] = [
     bikes_moved: 22,
     status: "active",
     stops: [
-      { station_id: "A32007", station_name: "Harvard Square",               lat: 42.3735, lon: -71.1218, action: "pickup",  bikes: 10, order: 1 },
-      { station_id: "A32006", station_name: "MIT at Mass Ave",              lat: 42.3581, lon: -71.0936, action: "dropoff", bikes: 7,  order: 2 },
-      { station_id: "A32046", station_name: "Broadway T Station",           lat: 42.3425, lon: -71.0571, action: "pickup",  bikes: 5,  order: 3 },
-      { station_id: "A32049", station_name: "Seaport Blvd",                 lat: 42.3513, lon: -71.0490, action: "dropoff", bikes: 5,  order: 4 },
-      { station_id: "A32030", station_name: "Kenmore Square",               lat: 42.3489, lon: -71.0955, action: "dropoff", bikes: 5,  order: 5 },
+      { station_id: "A32007", station_name: "Harvard Square",    lat: 42.3735, lon: -71.1218, action: "pickup",  bikes: 10, order: 1 },
+      { station_id: "A32006", station_name: "MIT at Mass Ave",   lat: 42.3581, lon: -71.0936, action: "dropoff", bikes: 7,  order: 2 },
+      { station_id: "A32046", station_name: "Broadway T Station",lat: 42.3425, lon: -71.0571, action: "pickup",  bikes: 5,  order: 3 },
+      { station_id: "A32049", station_name: "Seaport Blvd",      lat: 42.3513, lon: -71.0490, action: "dropoff", bikes: 5,  order: 4 },
+      { station_id: "A32030", station_name: "Kenmore Square",    lat: 42.3489, lon: -71.0955, action: "dropoff", bikes: 5,  order: 5 },
     ],
   },
   {
@@ -87,19 +66,56 @@ const ROUTES: RebalancingRoute[] = [
     bikes_moved: 12,
     status: "planned",
     stops: [
-      { station_id: "A32021", station_name: "Packard's Corner",             lat: 42.3519, lon: -71.1323, action: "pickup",  bikes: 4,  order: 1 },
-      { station_id: "A32031", station_name: "Fenway Park",                  lat: 42.3465, lon: -71.0979, action: "dropoff", bikes: 4,  order: 2 },
-      { station_id: "A32040", station_name: "North End - Hanover St",       lat: 42.3634, lon: -71.0548, action: "pickup",  bikes: 4,  order: 3 },
-      { station_id: "A32008", station_name: "Central Square",               lat: 42.3651, lon: -71.1032, action: "dropoff", bikes: 4,  order: 4 },
+      { station_id: "A32021", station_name: "Packard's Corner",      lat: 42.3519, lon: -71.1323, action: "pickup",  bikes: 4, order: 1 },
+      { station_id: "A32031", station_name: "Fenway Park",           lat: 42.3465, lon: -71.0979, action: "dropoff", bikes: 4, order: 2 },
+      { station_id: "A32040", station_name: "North End - Hanover St",lat: 42.3634, lon: -71.0548, action: "pickup",  bikes: 4, order: 3 },
+      { station_id: "A32008", station_name: "Central Square",        lat: 42.3651, lon: -71.1032, action: "dropoff", bikes: 4, order: 4 },
     ],
   },
 ];
 
 const ROUTE_NAMES: Record<string, string> = {
   "route-alpha": "Truck Alpha",
-  "route-beta": "Truck Beta",
+  "route-beta":  "Truck Beta",
   "route-gamma": "Truck Gamma",
 };
+
+/* ------------------------------------------------------------------ */
+/*  Derive station risk from real predictions                          */
+/* ------------------------------------------------------------------ */
+function deriveStationStatuses(stations: Station[], predictions: Prediction[]): StationStatus[] {
+  const demandByStation: Record<string, number[]> = {};
+  for (const p of predictions) {
+    if (!demandByStation[p.station_id]) demandByStation[p.station_id] = [];
+    demandByStation[p.station_id].push(p.predicted_demand);
+  }
+
+  return stations.slice(0, 60).map((s) => {
+    const demands = demandByStation[s.station_id] ?? [];
+    const avg = demands.length > 0 ? demands.reduce((a, b) => a + b, 0) / demands.length : 1;
+    const peak = demands.length > 0 ? Math.max(...demands) : avg;
+
+    // Estimate fill based on demand signal (high demand → likely to empty)
+    const fill_pct = Math.min(95, Math.max(5, Math.round(50 - (avg - 1) * 15)));
+    const current_bikes = Math.round((fill_pct / 100) * s.capacity);
+
+    let risk_level: StationStatus["risk_level"] = "moderate";
+    if (fill_pct < 15 || peak > 5) risk_level = "critical";
+    else if (fill_pct < 30 || avg > 3) risk_level = "low";
+    else if (fill_pct > 85) risk_level = "surplus";
+
+    return {
+      station_id: s.station_id,
+      current_bikes,
+      capacity: s.capacity,
+      fill_pct,
+      predicted_demand_1h: parseFloat(avg.toFixed(1)),
+      predicted_demand_6h: parseFloat((avg * 4.5).toFixed(1)),
+      risk_level,
+      net_flow_1h: risk_level === "critical" ? -Math.ceil(avg) : risk_level === "surplus" ? Math.ceil(avg * 0.5) : 0,
+    };
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -127,12 +143,32 @@ function routeStatusBadge(status: string): "running" | "pending" | "success" {
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 export default function RebalancingPage() {
-  const [stations, setStations] = useState<Station[]>([]);
+  const [stationStatuses, setStationStatuses] = useState<StationStatus[]>([]);
+  const [stationLookup, setStationLookup] = useState<Record<string, { name: string; lat: number; lon: number; capacity: number }>>({});
+  const [stationsLive, setStationsLive] = useState(false);
+  const [predictionsLive, setPredictionsLive] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getStations().then((s) => {
-      setStations(s);
+    Promise.all([getStations(), getPredictions()]).then(([stationsResult, predictionsResult]) => {
+      setStationsLive(stationsResult.isLive);
+      setPredictionsLive(predictionsResult.isLive);
+
+      const stations = stationsResult.data;
+      const predictions = predictionsResult.data;
+
+      const lookup: Record<string, { name: string; lat: number; lon: number; capacity: number }> = {};
+      for (const s of stations) {
+        lookup[s.station_id] = { name: s.station_name, lat: s.lat, lon: s.lon, capacity: s.capacity };
+      }
+      setStationLookup(lookup);
+
+      // Use real predictions to derive risk if both are live, else use mock
+      if (stationsResult.isLive && predictionsResult.isLive) {
+        setStationStatuses(deriveStationStatuses(stations, predictions));
+      } else {
+        setStationStatuses(mockStationStatuses);
+      }
     }).finally(() => setLoading(false));
   }, []);
 
@@ -141,25 +177,18 @@ export default function RebalancingPage() {
       <div className="p-5 md:p-7 flex items-center justify-center min-h-[50vh]">
         <div className="flex flex-col items-center gap-3">
           <div className="h-6 w-6 rounded-full border-2 border-blue-400/30 border-t-blue-400 animate-spin" />
-          <p className="text-sm text-slate-500">Loading data...</p>
+          <p className="text-sm text-slate-500">Loading station data...</p>
         </div>
       </div>
     );
   }
 
-  /* Derived data */
-  const stationLookup: Record<string, { name: string; lat: number; lon: number; capacity: number }> = {};
-  for (const s of stations) {
-    stationLookup[s.station_id] = { name: s.station_name, lat: s.lat, lon: s.lon, capacity: s.capacity };
-  }
-
   const activeTrucks = ROUTES.filter((r) => r.status === "active").length;
   const totalBikesMoved = ROUTES.reduce((sum, r) => sum + r.bikes_moved, 0);
-  const criticalCount = STATION_STATUSES.filter((s) => s.risk_level === "critical").length;
-  const avgFillRate = Math.round(STATION_STATUSES.reduce((sum, s) => sum + s.fill_pct, 0) / STATION_STATUSES.length);
+  const criticalCount = stationStatuses.filter((s) => s.risk_level === "critical").length;
+  const avgFillRate = Math.round(stationStatuses.reduce((sum, s) => sum + s.fill_pct, 0) / (stationStatuses.length || 1));
 
-  /* Sorted by urgency: critical first, then by lowest fill */
-  const priorityStations = [...STATION_STATUSES]
+  const priorityStations = [...stationStatuses]
     .sort((a, b) => {
       const riskOrder: Record<string, number> = { critical: 0, low: 1, moderate: 2, surplus: 3 };
       const riskDiff = (riskOrder[a.risk_level] ?? 4) - (riskOrder[b.risk_level] ?? 4);
@@ -168,28 +197,36 @@ export default function RebalancingPage() {
     })
     .slice(0, 15);
 
+  const dataIsLive = stationsLive && predictionsLive;
+
   return (
     <div className="min-h-screen p-6 md:p-8 space-y-6">
-      {/* Header with inline stats */}
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
-        className="flex items-end justify-between"
+        className="flex items-start justify-between"
       >
         <div>
-          <h1 className="text-[22px] font-semibold text-white tracking-tight">Rebalancing</h1>
-          <p className="text-[13px] text-slate-500 mt-0.5">
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-[22px] font-semibold text-white tracking-tight">Rebalancing</h1>
+            <DataBadge isLive={dataIsLive} />
+          </div>
+          <p className="text-[13px] text-slate-500">
             {activeTrucks} trucks active · {totalBikesMoved} bikes in transit · {criticalCount} critical stations
           </p>
-        </div>
-        <div className="flex items-center gap-5 text-sm">
-          <div className="text-right">
-            <p className="text-[11px] text-slate-500">Network fill</p>
-            <p className="text-lg font-semibold text-white tabular-nums">
-              <AnimatedCounter value={avgFillRate} decimals={0} suffix="%" />
+          {!dataIsLive && (
+            <p className="text-[11px] text-amber-400/70 mt-1">
+              API unavailable — station risk levels are representative demo data, not real-time.
             </p>
-          </div>
+          )}
+        </div>
+        <div className="text-right">
+          <p className="text-[11px] text-slate-500">Network fill</p>
+          <p className="text-lg font-semibold text-white tabular-nums">
+            <AnimatedCounter value={avgFillRate} decimals={0} suffix="%" />
+          </p>
         </div>
       </motion.div>
 
@@ -201,9 +238,12 @@ export default function RebalancingPage() {
         viewport={{ once: true }}
         className="rounded-2xl border border-white/[0.06] bg-[#0f1623] p-4"
       >
-        <h3 className="text-sm font-semibold text-white mb-3">Truck Routes & Station Status</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-white">Truck Routes & Station Risk</h3>
+          <DataBadge isLive={dataIsLive} liveLabel="LIVE RISK" mockLabel="DEMO RISK" />
+        </div>
         <RebalancingMapWrapper
-          stations={STATION_STATUSES}
+          stations={stationStatuses}
           routes={ROUTES}
           stationNames={stationLookup}
         />
@@ -216,7 +256,12 @@ export default function RebalancingPage() {
         transition={{ duration: 0.4, delay: 0.05 }}
         viewport={{ once: true }}
       >
-        <h3 className="text-sm font-semibold text-white mb-3">Route Details</h3>
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="text-sm font-semibold text-white">AI-Suggested Routes</h3>
+          <span className="text-[10px] text-slate-500 border border-white/[0.06] rounded-full px-2 py-0.5">
+            Model-generated · not dispatched
+          </span>
+        </div>
         <motion.div
           className="grid grid-cols-1 md:grid-cols-3 gap-4"
           variants={stagger}
@@ -230,7 +275,6 @@ export default function RebalancingPage() {
               variants={fadeUp}
               className="rounded-2xl border border-white/[0.06] bg-[#0f1623] p-5"
             >
-              {/* Route header */}
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-[13px] font-semibold text-white">
                   {ROUTE_NAMES[route.route_id] || route.truck_id}
@@ -241,14 +285,12 @@ export default function RebalancingPage() {
                 />
               </div>
 
-              {/* Route stats */}
               <div className="flex items-center gap-4 mb-4 text-[11px] text-slate-500">
                 <span>{route.total_distance_km} km</span>
                 <span>{route.estimated_duration_min} min</span>
                 <span>{route.bikes_moved} bikes</span>
               </div>
 
-              {/* Stop list */}
               <div className="space-y-1.5">
                 {route.stops
                   .sort((a, b) => a.order - b.order)
@@ -260,10 +302,7 @@ export default function RebalancingPage() {
                       <span className="text-[10px] font-mono text-slate-600 w-4 text-right shrink-0">
                         {stop.order}
                       </span>
-                      <span
-                        className="shrink-0"
-                        title={stop.action}
-                      >
+                      <span className="shrink-0">
                         {stop.action === "pickup" ? (
                           <ArrowUp className="h-3 w-3 text-blue-400" />
                         ) : (
@@ -284,7 +323,7 @@ export default function RebalancingPage() {
         </motion.div>
       </motion.div>
 
-      {/* Station Priority List */}
+      {/* Station Priority */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -292,9 +331,18 @@ export default function RebalancingPage() {
         viewport={{ once: true }}
         className="rounded-2xl border border-white/[0.06] bg-[#0f1623] p-5"
       >
-        <h3 className="text-sm font-semibold text-white mb-4">Station Priority</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Station Priority</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {dataIsLive
+                ? "Risk derived from live model predictions — sorted by urgency"
+                : "Demo data — showing representative station risk levels"}
+            </p>
+          </div>
+          <DataBadge isLive={dataIsLive} liveLabel="LIVE PREDICTIONS" mockLabel="DEMO DATA" />
+        </div>
 
-        {/* Header row */}
         <div className="grid grid-cols-[1fr_140px_80px_80px_80px_60px] gap-2 px-3 pb-2 text-[10px] font-medium text-slate-500 uppercase tracking-wider border-b border-white/[0.04]">
           <span>Station</span>
           <span>Fill Level</span>
@@ -304,7 +352,6 @@ export default function RebalancingPage() {
           <span className="text-right">Flow</span>
         </div>
 
-        {/* Rows */}
         <div className="divide-y divide-white/[0.03]">
           {priorityStations.map((s) => {
             const info = stationLookup[s.station_id];
@@ -315,46 +362,21 @@ export default function RebalancingPage() {
                 key={s.station_id}
                 className="grid grid-cols-[1fr_140px_80px_80px_80px_60px] gap-2 items-center px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
               >
-                {/* Station name */}
-                <span className="text-[12px] text-slate-300 truncate" title={name}>
-                  {name}
-                </span>
-
-                {/* Fill bar */}
+                <span className="text-[12px] text-slate-300 truncate" title={name}>{name}</span>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 h-[5px] rounded-full bg-white/[0.06] overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${Math.min(100, s.fill_pct)}%`,
-                        backgroundColor: fillBarColor(s.fill_pct),
-                      }}
+                      style={{ width: `${Math.min(100, s.fill_pct)}%`, backgroundColor: fillBarColor(s.fill_pct) }}
                     />
                   </div>
-                  <span className="text-[10px] text-slate-500 tabular-nums w-7 text-right">
-                    {s.fill_pct}%
-                  </span>
+                  <span className="text-[10px] text-slate-500 tabular-nums w-7 text-right">{s.fill_pct}%</span>
                 </div>
-
-                {/* Current / capacity */}
-                <span className="text-[11px] text-slate-400 text-right tabular-nums">
-                  {s.current_bikes}/{cap}
-                </span>
-
-                {/* Risk badge */}
+                <span className="text-[11px] text-slate-400 text-right tabular-nums">{s.current_bikes}/{cap}</span>
                 <span className="flex justify-center">
-                  <StatusBadge
-                    status={riskBadge(s.risk_level)}
-                    label={s.risk_level.charAt(0).toUpperCase() + s.risk_level.slice(1)}
-                  />
+                  <StatusBadge status={riskBadge(s.risk_level)} label={s.risk_level.charAt(0).toUpperCase() + s.risk_level.slice(1)} />
                 </span>
-
-                {/* Predicted demand */}
-                <span className="text-[11px] text-slate-400 text-right tabular-nums">
-                  {s.predicted_demand_1h.toFixed(1)}
-                </span>
-
-                {/* Net flow */}
+                <span className="text-[11px] text-slate-400 text-right tabular-nums">{s.predicted_demand_1h.toFixed(1)}</span>
                 <span className={`text-[11px] text-right tabular-nums font-medium ${s.net_flow_1h > 0 ? "text-emerald-400/70" : s.net_flow_1h < 0 ? "text-red-400/70" : "text-slate-500"}`}>
                   {s.net_flow_1h > 0 ? "+" : ""}{s.net_flow_1h}
                 </span>

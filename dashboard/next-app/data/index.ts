@@ -33,42 +33,46 @@ async function fetchJson<T>(path: string, fallback: T): Promise<any> {
   }
 }
 
-export async function getStations(): Promise<Station[]> {
-  const data = await fetchJson("/api/stations", null);
-  if (Array.isArray(data) && data.length > 0) return data;
-  return mockStations;
+export async function getStations(): Promise<{ data: Station[]; isLive: boolean }> {
+  const raw = await fetchJson("/api/stations", null);
+  if (Array.isArray(raw) && raw.length > 0) return { data: raw, isLive: true };
+  return { data: mockStations, isLive: false };
 }
 
-export async function getPredictions(stationId?: string): Promise<Prediction[]> {
+export async function getPredictions(stationId?: string): Promise<{ data: Prediction[]; isLive: boolean }> {
   const url = stationId ? `/api/predictions?station_id=${stationId}` : "/api/predictions";
-  const data = await fetchJson(url, null);
-  if (Array.isArray(data) && data.length > 0) return data;
-  return stationId ? mockPredictions.filter(p => p.station_id === stationId) : mockPredictions;
+  const raw = await fetchJson(url, null);
+  if (Array.isArray(raw) && raw.length > 0) return { data: raw, isLive: true };
+  const mock = stationId ? mockPredictions.filter(p => p.station_id === stationId) : mockPredictions;
+  return { data: mock, isLive: false };
 }
 
 export async function getModelMetrics(): Promise<ModelMetrics[]> {
   return mockModelMetrics;
 }
 
-export async function getLatestMetrics(): Promise<ModelMetrics> {
-  const data = await fetchJson("/api/metrics/latest", null);
-  if (data && data.run_id) {
+export async function getLatestMetrics(): Promise<{ data: ModelMetrics; isLive: boolean }> {
+  const raw = await fetchJson("/api/metrics/latest", null);
+  if (raw && raw.run_id) {
     return {
-      run_id: data.run_id,
-      model_type: data.model_type || "XGBoostForecaster",
-      val_rmse: data.val_rmse ?? 0,
-      val_mae: data.val_mae ?? (data.val_rmse ? data.val_rmse * 0.5 : 0),
-      val_r2: data.val_r2 ?? data.test_r2 ?? 0,
-      test_rmse: data.test_rmse ?? 0,
-      test_mae: data.test_mae ?? (data.test_rmse ? data.test_rmse * 0.5 : 0),
-      test_r2: data.test_r2 ?? 0,
-      best_iteration: data.best_iteration ?? 0,
-      validation_status: data.validation_status ?? "PASSED",
-      trained_at: data.promoted_at ?? new Date().toISOString(),
-      thresholds: { max_test_rmse: 2.5, min_test_r2: 0.5, max_test_mae: 1.5 },
-    } as ModelMetrics;
+      isLive: true,
+      data: {
+        run_id: raw.run_id,
+        model_type: raw.model_type || "XGBoostForecaster",
+        val_rmse: raw.val_rmse ?? 0,
+        val_mae: raw.val_mae ?? (raw.val_rmse ? raw.val_rmse * 0.5 : 0),
+        val_r2: raw.val_r2 ?? raw.test_r2 ?? 0,
+        test_rmse: raw.test_rmse ?? 0,
+        test_mae: raw.test_mae ?? (raw.test_rmse ? raw.test_rmse * 0.5 : 0),
+        test_r2: raw.test_r2 ?? 0,
+        best_iteration: raw.best_iteration ?? 0,
+        validation_status: raw.validation_status ?? "PASSED",
+        trained_at: raw.promoted_at ?? new Date().toISOString(),
+        thresholds: { max_test_rmse: 2.5, min_test_r2: 0.5, max_test_mae: 1.5 },
+      } as ModelMetrics,
+    };
   }
-  return mockModelMetrics[mockModelMetrics.length - 1];
+  return { data: mockModelMetrics[mockModelMetrics.length - 1], isLive: false };
 }
 
 export async function getFeatureImportance(): Promise<FeatureImportance[]> {
@@ -151,10 +155,10 @@ export async function getDriftReport(scenario?: "stable" | "alert"): Promise<Dri
   return scenario === "alert" ? mockDriftAlert : mockDriftStable;
 }
 
-export async function getPipelineStatus(): Promise<PipelineStatus> {
-  const data = await fetchJson("/api/pipeline-status", null);
-  if (data && data.tasks) return data;
-  return mockPipelineStatus;
+export async function getPipelineStatus(): Promise<{ data: PipelineStatus; isLive: boolean }> {
+  const raw = await fetchJson("/api/pipeline-status", null);
+  if (raw && raw.tasks) return { data: raw, isLive: true };
+  return { data: mockPipelineStatus, isLive: false };
 }
 
 export async function getStationStatuses(): Promise<StationStatus[]> {

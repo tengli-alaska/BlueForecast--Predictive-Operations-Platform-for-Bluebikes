@@ -17,6 +17,7 @@ import {
   getStationStatuses,
 } from "@/data";
 import { formatDate } from "@/lib/utils";
+import DataBadge from "@/components/shared/DataBadge";
 import type { ModelMetrics, PipelineStatus, BiasReport, DriftReport, Station, DemandHeatmapEntry, StationStatus } from "@/types";
 
 const fade = {
@@ -37,6 +38,9 @@ interface OverviewData {
   allMetrics: ModelMetrics[];
   heatmapData: DemandHeatmapEntry[];
   stationStatuses: StationStatus[];
+  metricsLive: boolean;
+  pipelineLive: boolean;
+  stationsLive: boolean;
 }
 
 export default function OverviewPage() {
@@ -53,8 +57,20 @@ export default function OverviewPage() {
       getModelMetrics(),
       getDemandHeatmap(),
       getStationStatuses(),
-    ]).then(([latest, pipeline, biasReport, driftReport, stations, allMetrics, heatmapData, stationStatuses]) => {
-      setData({ latest, pipeline, biasReport, driftReport, stations, allMetrics, heatmapData, stationStatuses });
+    ]).then(([latestResult, pipelineResult, biasReport, driftReport, stationsResult, allMetrics, heatmapData, stationStatuses]) => {
+      setData({
+        latest: latestResult.data,
+        pipeline: pipelineResult.data,
+        biasReport,
+        driftReport,
+        stations: stationsResult.data,
+        allMetrics,
+        heatmapData,
+        stationStatuses,
+        metricsLive: latestResult.isLive,
+        pipelineLive: pipelineResult.isLive,
+        stationsLive: stationsResult.isLive,
+      });
     }).finally(() => setLoading(false));
   }, []);
 
@@ -69,7 +85,7 @@ export default function OverviewPage() {
     );
   }
 
-  const { latest, pipeline, biasReport, driftReport, stations, allMetrics, heatmapData, stationStatuses } = data;
+  const { latest, pipeline, biasReport, driftReport, stations, allMetrics, heatmapData, stationStatuses, metricsLive, pipelineLive, stationsLive } = data;
 
   const criticalCount = stationStatuses.filter((s) => s.risk_level === "critical").length;
   const avgFill = Math.round(stationStatuses.reduce((a, b) => a + b.fill_pct, 0) / stationStatuses.length);
@@ -91,9 +107,12 @@ export default function OverviewPage() {
       {/* Header — tight, informational */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-end justify-between">
         <div>
-          <h1 className="text-[22px] font-semibold text-white tracking-tight">Good morning</h1>
-          <p className="text-[13px] text-slate-500 mt-0.5">
-            {stations.length} stations monitored · Model v{pipeline.metrics.registry_version} · Last trained {formatDate(latest.trained_at)}
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-[22px] font-semibold text-white tracking-tight">Good morning</h1>
+            <DataBadge isLive={metricsLive && pipelineLive && stationsLive} />
+          </div>
+          <p className="text-[13px] text-slate-500">
+            {stations.length} stations monitored · Model v{pipeline.metrics?.registry_version ?? "—"} · Last trained {formatDate(latest.trained_at)}
           </p>
         </div>
         {biasFlags.length > 0 && (

@@ -6,8 +6,12 @@ services:
       - "8000:8000"
     environment:
       - GCS_BUCKET=bluebikes-demand-predictor-data
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
+    env_file:
+      - path: .env
+        required: false
     volumes:
-      - ~/.config/gcloud:/root/.config/gcloud:ro
+      - ${GCLOUD_CONFIG_DIR:-~/.config/gcloud}:/root/.config/gcloud:ro
     restart: unless-stopped
 
   dashboard:
