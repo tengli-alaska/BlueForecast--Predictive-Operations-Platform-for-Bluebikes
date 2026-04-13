@@ -6,7 +6,7 @@ Lightweight edge deployment of the BlueForecast demand forecasting model. Conver
 
 ## Overview
 
-The edge deployment enables BlueForecast's demand predictions to run on resource-constrained devices (Raspberry Pi, edge servers, IoT gateways) without requiring access to GCS, MLflow, or any cloud service. The entire inference stack fits in a ~200MB Docker image.
+The edge deployment enables BlueForecast's demand predictions to run on resource-constrained devices (Raspberry Pi, edge servers, IoT gateways) without requiring access to GCS, MLflow, or any cloud service. The entire inference stack fits in a single Docker image.
 
 **Architecture:**
 ```
@@ -38,13 +38,31 @@ The XGBoost model is converted to ONNX (Open Neural Network Exchange) format for
 
 | Aspect | XGBoost (Original) | ONNX (Edge) |
 |--------|-------------------|-------------|
+| File format | `.ubj` binary | `.onnx` |
+| File size | 1.28 MB | 1.02 MB |
 | Runtime dependency | xgboost, mlflow, GCS | onnxruntime only |
-| Inference framework | Python xgboost | ONNX Runtime (C++) |
-| Cloud dependency | MLflow tracking server | None |
-| Deployment size | ~500MB+ with dependencies | ~200MB Docker image |
-| Inference speed | Good | Faster (optimized C++ backend) |
+| Inference framework | Python xgboost | ONNX Runtime (C++ backend) |
+| Cloud dependency | MLflow + GCS | None |
+| Inference latency | ~5ms | **2.8ms** |
 
-The conversion process validates that ONNX predictions match XGBoost predictions within a tolerance of 0.01 MAE.
+The ONNX conversion is validated automatically — predictions are compared between XGBoost and ONNX outputs with a max accepted difference of 0.01. Our validation result: **Max diff: 0.000001 (PASSED)**.
+
+---
+
+## Model Features (29 total)
+
+The model uses 29 input features across 6 categories:
+
+| Category | Features |
+|----------|----------|
+| **Station** | `start_station_id`, `capacity` |
+| **Time** | `hour_of_day`, `day_of_week`, `month`, `year`, `is_weekend`, `is_holiday` |
+| **Weather** | `temperature_c`, `precipitation_mm`, `wind_speed_kmh`, `humidity_pct`, `feels_like_c`, `weather_code`, `is_cold`, `is_hot`, `is_precipitation` |
+| **Lag** | `demand_lag_1h`, `demand_lag_24h`, `demand_lag_168h` |
+| **Rolling** | `rolling_avg_3h`, `rolling_avg_6h`, `rolling_avg_24h` |
+| **Cyclical** | `hour_sin`, `hour_cos`, `dow_sin`, `dow_cos`, `month_sin`, `month_cos` |
+
+Cyclical features are auto-computed by the inference server if not provided in the request.
 
 ---
 
@@ -52,8 +70,8 @@ The conversion process validates that ONNX predictions match XGBoost predictions
 
 - Python 3.10+
 - Docker & Docker Compose
-- Google Cloud SDK (`gcloud`) — only needed for model export, not runtime
-- Access to the `gs://bluebikes-demand-predictor-data` GCS bucket — only for export
+- Google Cloud SDK (`gcloud`) — only needed for model download, not runtime
+- Access to `gs://bluebikes-demand-predictor-data` GCS bucket — only for initial setup
 
 ---
 
@@ -63,7 +81,9 @@ The conversion process validates that ONNX predictions match XGBoost predictions
 
 ```bash
 git clone https://github.com/tengli-alaska/BlueForecast--Predictive-Operations-Platform-for-Bluebikes.git
-cd BlueForecast--Predictive-Operations-Platform-for-Bluebikes/edge-deployment
+cd BlueForecast--Predictive-Operations-Platform-for-Bluebikes
+git checkout feature/edge-deployment-chitra
+cd edge-deployment
 ```
 
 ### 2. Install export dependencies
@@ -71,82 +91,100 @@ cd BlueForecast--Predictive-Operations-Platform-for-Bluebikes/edge-deployment
 These are needed only once, on your dev machine, to convert the model:
 
 ```bash
-pip install xgboost mlflow onnxruntime onnxmltools skl2onnx numpy
+pip install xgboost mlflow onnxruntime onnxmltools skl2onnx numpy fastapi uvicorn
 ```
 
-### 3. Export the model to ONNX
-
-The export script pulls the champion model from MLflow and converts it:
+### 3. Download the trained model from GCS
 
 ```bash
-# If using local MLflow (mlruns/ directory):
-python export_to_onnx.py
+gsutil cp gs://bluebikes-demand-predictor-data/mlflow-artifacts/1/models/m-f014a08eca0c4a1494dcb2d3079a14f9/artifacts/model.ubj model/model.ubj
+```
 
-# If using Docker MLflow server:
-set MLFLOW_TRACKING_URI=http://localhost:5000   # Windows
-export MLFLOW_TRACKING_URI=http://localhost:5000 # Mac/Linux
-python export_to_onnx.py
+### 4. Export the model to ONNX
 
-# Or specify a specific run ID:
-python export_to_onnx.py --run-id 7a8b836caadb47b29215eeeb1c440734
+```bash
+python export_to_onnx.py
+```
+
+Expected output:
+```
+Loading XGBoost model from model/model.ubj...
+Converting to ONNX (num_features=29)...
+ONNX conversion complete.
+ONNX model saved: model/blueforecast.onnx
+Validating ONNX model...
+Validation — Max diff: 0.000001 | Mean diff: 0.000000
+ONNX validation PASSED.
+============================================================
+EXPORT COMPLETE
+  Source:     model/model.ubj (1.28 MB)
+  ONNX:       model/blueforecast.onnx (1.02 MB)
+  Validation: PASSED
+============================================================
 ```
 
 This produces:
 - `model/blueforecast.onnx` — the optimized ONNX model
 - `model/model_metadata.json` — feature names, metrics, validation results
 
-### 4. Build the Docker image
-
-```bash
-docker build -t blueforecast-edge .
-```
-
-### 5. Run the container
+### 5. Build and run the Docker container
 
 ```bash
 # Using docker compose:
-docker compose up
+docker compose up --build
 
 # Or directly:
-docker run -p 8080:8080 blueforecast-edge
+docker run -p 8080:8080 edge-deployment-edge-inference:latest
 ```
 
 ### 6. Verify the deployment
 
+Health check:
 ```bash
-# Health check
+# Linux/Mac
 curl http://localhost:8080/health
 
-# Model info
-curl http://localhost:8080/model-info
+# Windows PowerShell
+Invoke-RestMethod http://localhost:8080/health
+```
 
-# Test prediction
-curl -X POST http://localhost:8080/predict \
-  -H "Content-Type: application/json" \
-  -d '{
-    "start_station_id": 100,
-    "capacity": 19,
-    "hour_of_day": 8,
-    "day_of_week": 1,
-    "month": 6,
-    "year": 2024,
-    "is_weekend": 0,
-    "is_holiday": 0,
-    "temperature_c": 22.5,
-    "precipitation_mm": 0.0,
-    "wind_speed_kmh": 12.0,
-    "humidity_pct": 65.0,
-    "feels_like_c": 21.0,
-    "is_cold": 0,
-    "is_hot": 0,
-    "is_precipitation": 0,
-    "demand_lag_1h": 5.0,
-    "demand_lag_24h": 8.0,
-    "demand_lag_168h": 7.0,
-    "rolling_avg_3h": 4.5,
-    "rolling_avg_6h": 5.2,
-    "rolling_avg_24h": 6.1
-  }'
+Expected response:
+```json
+{
+  "status": "healthy",
+  "model_loaded": true,
+  "model_format": "ONNX",
+  "uptime_seconds": 10.5
+}
+```
+
+Test prediction:
+```bash
+# Windows PowerShell
+$body = @{
+    start_station_id = 100; capacity = 19; hour_of_day = 8
+    day_of_week = 1; month = 6; year = 2024
+    is_weekend = 0; is_holiday = 0
+    temperature_c = 22.5; precipitation_mm = 0.0
+    wind_speed_kmh = 12.0; humidity_pct = 65.0
+    feels_like_c = 21.0; weather_code = 0
+    is_cold = 0; is_hot = 0; is_precipitation = 0
+    demand_lag_1h = 5.0; demand_lag_24h = 8.0
+    demand_lag_168h = 7.0; rolling_avg_3h = 4.5
+    rolling_avg_6h = 5.2; rolling_avg_24h = 6.1
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri http://localhost:8080/predict -ContentType "application/json" -Body $body
+```
+
+Expected response:
+```json
+{
+  "station_id": 100,
+  "predicted_demand": 1.236,
+  "prediction_timestamp": "2026-04-13T06:37:50.936357",
+  "inference_time_ms": 2.8
+}
 ```
 
 ### 7. Run tests
@@ -156,7 +194,7 @@ pip install pytest httpx
 pytest tests/test_inference.py -v
 ```
 
-Expected: 25+ tests covering feature schema, cyclical encoding, request conversion, ONNX model validation, API endpoints, and metadata validation.
+Expected: **18 passed** covering feature schema, cyclical encoding, request conversion, ONNX model validation, and metadata validation.
 
 ---
 
@@ -178,23 +216,37 @@ edge-deployment/
 ├── Dockerfile              # Lightweight Docker image (python:3.11-slim)
 ├── docker-compose.yaml     # Container orchestration with resource limits
 ├── requirements.txt        # Runtime dependencies (onnxruntime, fastapi)
-├── export_to_onnx.py       # Model export: MLflow XGBoost → ONNX
+├── export_to_onnx.py       # Model export: XGBoost .ubj → ONNX
 ├── inference_server.py     # FastAPI inference server (no cloud deps)
 ├── config.yaml             # Configuration and model metadata
-├── model/                  # ONNX model output directory
-│   ├── blueforecast.onnx         # Exported ONNX model (after running export)
-│   └── model_metadata.json       # Feature schema + metrics (after running export)
+├── model/
+│   ├── model.ubj                 # Source XGBoost model (from GCS)
+│   ├── blueforecast.onnx         # Exported ONNX model
+│   └── model_metadata.json       # Feature schema + metrics
 ├── tests/
-│   └── test_inference.py   # 25+ unit tests
+│   └── test_inference.py   # 18 unit tests
 └── README.md               # This file
 ```
 
 ---
 
+## Docker Resource Limits
+
+The container is configured for edge-friendly deployment:
+
+| Resource | Limit |
+|----------|-------|
+| Memory | 512 MB |
+| CPU | 1 core |
+| Health check | Every 30s |
+| Auto-restart | On failure |
+
+---
+
 ## Connection to CI/CD
 
-The edge deployment integrates with the existing GitHub Actions CI/CD pipeline. When a new model version is pushed and approved in MLflow:
-1. The export script can be triggered to generate a new ONNX model
+The edge deployment integrates with the existing GitHub Actions CI/CD pipeline:
+1. When a new model version is approved in MLflow, the export script generates a new ONNX model
 2. The Docker image is rebuilt with the updated model
 3. The new image is deployed to edge devices
 
@@ -212,7 +264,7 @@ This endpoint is used by Docker's built-in HEALTHCHECK and can be monitored by e
 
 ---
 
-## Training Metrics (Champion Model)
+## Training Metrics (Source Model)
 
 | Metric | Value |
 |--------|-------|
@@ -221,4 +273,16 @@ This endpoint is used by Docker's built-in HEALTHCHECK and can be monitored by e
 | Test R² | 0.7022 |
 | Validation Status | PASSED |
 | Bias Status | PASSED |
-| Run ID | 7a8b836caadb47b29215eeeb1c440734 |
+
+---
+
+## Edge vs Cloud Comparison
+
+| Aspect | Cloud (Sruthilaya) | Edge (Chitra) |
+|--------|-------------------|---------------|
+| Deployment target | GCP Cloud Run | Docker on edge device |
+| Model format | XGBoost via MLflow | ONNX Runtime |
+| Data source | Live GCS reads | Self-contained |
+| Scaling | Auto-scale 2–10 instances | Single instance |
+| Internet required | Yes | No |
+| Use case | Operations dashboard | Field devices, offline stations |
