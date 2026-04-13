@@ -25,9 +25,9 @@ class TestFeatureSchema:
     """Ensure feature schema matches between export and inference."""
 
     def test_feature_count(self):
-        """Feature columns should have exactly 28 features."""
+        """Feature columns should have exactly 29 features."""
         from inference_server import FEATURE_COLUMNS
-        assert len(FEATURE_COLUMNS) == 28, f"Expected 28 features, got {len(FEATURE_COLUMNS)}"
+        assert len(FEATURE_COLUMNS) == 29, f"Expected 29 features, got {len(FEATURE_COLUMNS)}"
 
     def test_feature_columns_match_export(self):
         """Feature columns in server must match export script."""
@@ -46,6 +46,7 @@ class TestFeatureSchema:
         required = [
             "start_station_id", "capacity", "hour_of_day", "temperature_c",
             "demand_lag_1h", "demand_lag_24h", "hour_sin", "hour_cos",
+            "weather_code",
         ]
         for feat in required:
             assert feat in FEATURE_COLUMNS, f"Missing required feature: {feat}"
@@ -67,7 +68,7 @@ class TestCyclicalFeatures:
             assert -1 <= h_cos <= 1, f"hour_cos out of range for hour={hour}"
 
     def test_hour_midnight_values(self):
-        """Hour 0 (midnight): sin≈0, cos≈1."""
+        """Hour 0 (midnight): sin~0, cos~1."""
         from math import cos, pi, sin
         assert abs(sin(2 * pi * 0 / 24)) < 1e-10
         assert abs(cos(2 * pi * 0 / 24) - 1.0) < 1e-10
@@ -113,6 +114,7 @@ class TestRequestConversion:
             wind_speed_kmh=12.0,
             humidity_pct=65.0,
             feels_like_c=21.0,
+            weather_code=0,
             is_cold=0,
             is_hot=0,
             is_precipitation=0,
@@ -125,11 +127,11 @@ class TestRequestConversion:
         )
 
     def test_array_shape(self):
-        """Output array must be (1, 28)."""
+        """Output array must be (1, 29)."""
         from inference_server import _request_to_array
         req = self._make_sample_request()
         arr = _request_to_array(req)
-        assert arr.shape == (1, 28), f"Expected (1, 28), got {arr.shape}"
+        assert arr.shape == (1, 29), f"Expected (1, 29), got {arr.shape}"
 
     def test_array_dtype(self):
         """Output array must be float32 for ONNX."""
@@ -150,9 +152,9 @@ class TestRequestConversion:
         from inference_server import _request_to_array
         req = self._make_sample_request()
         arr = _request_to_array(req)
-        # hour_sin and hour_cos (indices 22, 23) should not be zero for hour=8
-        assert arr[0, 22] != 0.0, "hour_sin should be non-zero for hour=8"
-        assert arr[0, 23] != 0.0, "hour_cos should be non-zero for hour=8"
+        # hour_sin and hour_cos (indices 23, 24) should not be zero for hour=8
+        assert arr[0, 23] != 0.0, "hour_sin should be non-zero for hour=8"
+        assert arr[0, 24] != 0.0, "hour_cos should be non-zero for hour=8"
 
     def test_no_nan_values(self):
         """Output array must have no NaN values."""
@@ -168,7 +170,7 @@ class TestRequestConversion:
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "model", "blueforecast.onnx")
 
 
-@pytest.mark.skipif(not os.path.exists(MODEL_PATH), reason="ONNX model not found — run export_to_onnx.py first")
+@pytest.mark.skipif(not os.path.exists(MODEL_PATH), reason="ONNX model not found")
 class TestONNXModel:
     """Test the exported ONNX model."""
 
@@ -179,17 +181,17 @@ class TestONNXModel:
         assert session is not None
 
     def test_model_input_shape(self):
-        """Model should expect (batch, 28) input."""
+        """Model should expect (batch, 29) input."""
         import onnxruntime as ort
         session = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
         input_shape = session.get_inputs()[0].shape
-        assert input_shape[1] == 28, f"Expected 28 features, model expects {input_shape[1]}"
+        assert input_shape[1] == 29, f"Expected 29 features, model expects {input_shape[1]}"
 
     def test_model_single_prediction(self):
         """Model should return a single prediction for a single input."""
         import onnxruntime as ort
         session = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
-        sample = np.random.rand(1, 28).astype(np.float32)
+        sample = np.random.rand(1, 29).astype(np.float32)
         input_name = session.get_inputs()[0].name
         result = session.run(None, {input_name: sample})
         assert result[0].shape[0] == 1
@@ -198,7 +200,7 @@ class TestONNXModel:
         """Model should handle batch predictions."""
         import onnxruntime as ort
         session = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
-        batch = np.random.rand(50, 28).astype(np.float32)
+        batch = np.random.rand(50, 29).astype(np.float32)
         input_name = session.get_inputs()[0].name
         result = session.run(None, {input_name: batch})
         assert result[0].flatten().shape[0] == 50
@@ -207,7 +209,7 @@ class TestONNXModel:
         """Predictions should be finite numbers."""
         import onnxruntime as ort
         session = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
-        sample = np.random.rand(5, 28).astype(np.float32)
+        sample = np.random.rand(5, 29).astype(np.float32)
         input_name = session.get_inputs()[0].name
         result = session.run(None, {input_name: sample})
         predictions = result[0].flatten()
@@ -222,7 +224,7 @@ class TestONNXModel:
 # ─────────────────────────────────────────────────────────────────────────────
 # Test 5: API endpoint tests (integration)
 # ─────────────────────────────────────────────────────────────────────────────
-@pytest.mark.skipif(not os.path.exists(MODEL_PATH), reason="ONNX model not found — run export_to_onnx.py first")
+@pytest.mark.skipif(not os.path.exists(MODEL_PATH), reason="ONNX model not found")
 class TestAPIEndpoints:
     """Test FastAPI endpoints using TestClient."""
 
@@ -231,6 +233,33 @@ class TestAPIEndpoints:
         from fastapi.testclient import TestClient
         from inference_server import app
         return TestClient(app)
+
+    def _sample_payload(self):
+        return {
+            "start_station_id": 100,
+            "capacity": 19,
+            "hour_of_day": 8,
+            "day_of_week": 1,
+            "month": 6,
+            "year": 2024,
+            "is_weekend": 0,
+            "is_holiday": 0,
+            "temperature_c": 22.5,
+            "precipitation_mm": 0.0,
+            "wind_speed_kmh": 12.0,
+            "humidity_pct": 65.0,
+            "feels_like_c": 21.0,
+            "weather_code": 0,
+            "is_cold": 0,
+            "is_hot": 0,
+            "is_precipitation": 0,
+            "demand_lag_1h": 5.0,
+            "demand_lag_24h": 8.0,
+            "demand_lag_168h": 7.0,
+            "rolling_avg_3h": 4.5,
+            "rolling_avg_6h": 5.2,
+            "rolling_avg_24h": 6.1,
+        }
 
     def test_health_endpoint(self, client):
         """GET /health should return 200."""
@@ -247,31 +276,7 @@ class TestAPIEndpoints:
 
     def test_predict_endpoint(self, client):
         """POST /predict should return a valid prediction."""
-        payload = {
-            "start_station_id": 100,
-            "capacity": 19,
-            "hour_of_day": 8,
-            "day_of_week": 1,
-            "month": 6,
-            "year": 2024,
-            "is_weekend": 0,
-            "is_holiday": 0,
-            "temperature_c": 22.5,
-            "precipitation_mm": 0.0,
-            "wind_speed_kmh": 12.0,
-            "humidity_pct": 65.0,
-            "feels_like_c": 21.0,
-            "is_cold": 0,
-            "is_hot": 0,
-            "is_precipitation": 0,
-            "demand_lag_1h": 5.0,
-            "demand_lag_24h": 8.0,
-            "demand_lag_168h": 7.0,
-            "rolling_avg_3h": 4.5,
-            "rolling_avg_6h": 5.2,
-            "rolling_avg_24h": 6.1,
-        }
-        response = client.post("/predict", json=payload)
+        response = client.post("/predict", json=self._sample_payload())
         assert response.status_code == 200
         data = response.json()
         assert data["station_id"] == 100
@@ -280,30 +285,7 @@ class TestAPIEndpoints:
 
     def test_predict_batch_endpoint(self, client):
         """POST /predict/batch should handle multiple stations."""
-        single = {
-            "start_station_id": 100,
-            "capacity": 19,
-            "hour_of_day": 8,
-            "day_of_week": 1,
-            "month": 6,
-            "year": 2024,
-            "is_weekend": 0,
-            "is_holiday": 0,
-            "temperature_c": 22.5,
-            "precipitation_mm": 0.0,
-            "wind_speed_kmh": 12.0,
-            "humidity_pct": 65.0,
-            "feels_like_c": 21.0,
-            "is_cold": 0,
-            "is_hot": 0,
-            "is_precipitation": 0,
-            "demand_lag_1h": 5.0,
-            "demand_lag_24h": 8.0,
-            "demand_lag_168h": 7.0,
-            "rolling_avg_3h": 4.5,
-            "rolling_avg_6h": 5.2,
-            "rolling_avg_24h": 6.1,
-        }
+        single = self._sample_payload()
         payload = {"predictions": [single, single, single]}
         response = client.post("/predict/batch", json=payload)
         assert response.status_code == 200
@@ -327,6 +309,7 @@ class TestAPIEndpoints:
             "wind_speed_kmh": 40.0,
             "humidity_pct": 95.0,
             "feels_like_c": -18.0,
+            "weather_code": 71,
             "is_cold": 1,
             "is_hot": 0,
             "is_precipitation": 1,
@@ -348,20 +331,20 @@ class TestAPIEndpoints:
 METADATA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "model", "model_metadata.json")
 
 
-@pytest.mark.skipif(not os.path.exists(METADATA_PATH), reason="Metadata not found — run export_to_onnx.py first")
+@pytest.mark.skipif(not os.path.exists(METADATA_PATH), reason="Metadata not found")
 class TestMetadata:
     """Validate exported metadata file."""
 
     def test_metadata_loads(self):
         with open(METADATA_PATH) as f:
             data = json.load(f)
-        assert "run_id" in data
         assert "feature_columns" in data
+        assert "model_type" in data
 
     def test_metadata_feature_count(self):
         with open(METADATA_PATH) as f:
             data = json.load(f)
-        assert data["num_features"] == 28
+        assert data["num_features"] == 29
 
     def test_metadata_onnx_validation_passed(self):
         with open(METADATA_PATH) as f:
