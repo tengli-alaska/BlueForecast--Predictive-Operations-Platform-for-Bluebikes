@@ -75,6 +75,7 @@ jobs:
           python - <<'EOF'
           import json, sys, os
           sys.path.insert(0, "src")
+          sys.path.insert(0, os.path.join(os.getcwd(), "src"))
 
           from monitoring.drift_detector import (
               load_reference, load_recent,
@@ -184,6 +185,7 @@ jobs:
           python - <<'EOF'
           import sys
           sys.path.insert(0, "src")
+          sys.path.insert(0, os.path.join(os.getcwd(), "src"))
           from monitoring.notify import notify_retrain_triggered
           notify_retrain_triggered(
               reason="${{ needs.monitor.outputs.drift_reason }}",
@@ -210,6 +212,7 @@ jobs:
           python - <<'EOF'
           import json, sys, os
           sys.path.insert(0, "src")
+          sys.path.insert(0, os.path.join(os.getcwd(), "src"))
 
           from training.train import run
 
@@ -230,6 +233,7 @@ jobs:
           import json, sys, os
           import gcsfs
           sys.path.insert(0, "src")
+          sys.path.insert(0, os.path.join(os.getcwd(), "src"))
 
           from monitoring.notify import notify_model_promoted, notify_retrain_skipped
 
