@@ -50,6 +50,7 @@ FEATURE_COLUMNS = [
     "wind_speed_kmh",
     "humidity_pct",
     "feels_like_c",
+    "weather_code",
     "is_cold",
     "is_hot",
     "is_precipitation",
@@ -84,6 +85,7 @@ class PredictionRequest(BaseModel):
     wind_speed_kmh: float = Field(..., ge=0)
     humidity_pct: float = Field(..., ge=0, le=100)
     feels_like_c: float
+    weather_code: int = Field(..., ge=0, description="WMO weather code")
     is_cold: int = Field(..., ge=0, le=1)
     is_hot: int = Field(..., ge=0, le=1)
     is_precipitation: int = Field(..., ge=0, le=1)
@@ -199,6 +201,7 @@ def _request_to_array(request: PredictionRequest) -> np.ndarray:
         request.wind_speed_kmh,
         request.humidity_pct,
         request.feels_like_c,
+        request.weather_code,
         request.is_cold,
         request.is_hot,
         request.is_precipitation,
