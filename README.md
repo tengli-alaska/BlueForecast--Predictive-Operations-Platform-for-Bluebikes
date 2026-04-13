@@ -59,7 +59,7 @@ BlueForecast combines real-time demand forecasting, automated drift detection, a
 
 ---
 
-## Data Pipeline (Phase 1) ✅
+## Data Pipeline
 
 The data pipeline is the foundation of BlueForecast. It transforms raw trip data into a clean, validated, feature-engineered dataset ready for ML model training. Orchestrated by Apache Airflow with data versioning via DVC.
 
@@ -369,7 +369,7 @@ All code, configuration, and pipeline definitions are version-controlled. Data i
 
 ## Team
 
-BlueForecast — MLOps Course Project
+BlueForecast — MLOps Course Project Group 20
 
 ---
 

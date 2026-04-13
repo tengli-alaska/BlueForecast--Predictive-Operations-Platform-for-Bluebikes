@@ -1,0 +1,195 @@
+{
+  "total_rows": 8214522,
+  "slices": [
+    {
+      "slice_name": "time_of_day",
+      "groups": [
+        {
+          "group": "night",
+          "count": 3080646,
+          "representation_pct": 37.5,
+          "mean_demand": 0.625,
+          "median_demand": 0.0,
+          "zero_demand_pct": 75.6
+        },
+        {
+          "group": "off_peak",
+          "count": 2738352,
+          "representation_pct": 33.34,
+          "mean_demand": 1.38,
+          "median_demand": 0.0,
+          "zero_demand_pct": 62.6
+        },
+        {
+          "group": "peak",
+          "count": 2395524,
+          "representation_pct": 29.16,
+          "mean_demand": 0.909,
+          "median_demand": 0.0,
+          "zero_demand_pct": 66.5
+        }
+      ],
+      "disparity_ratio": 2.21,
+      "flags": []
+    },
+    {
+      "slice_name": "day_type",
+      "groups": [
+        {
+          "group": "holiday",
+          "count": 269136,
+          "representation_pct": 3.28,
+          "mean_demand": 0.727,
+          "median_demand": 0.0,
+          "zero_demand_pct": 74.0
+        },
+        {
+          "group": "weekday",
+          "count": 5587242,
+          "representation_pct": 68.02,
+          "mean_demand": 1.022,
+          "median_demand": 0.0,
+          "zero_demand_pct": 67.2
+        },
+        {
+          "group": "weekend",
+          "count": 2358144,
+          "representation_pct": 28.71,
+          "mean_demand": 0.837,
+          "median_demand": 0.0,
+          "zero_demand_pct": 71.3
+        }
+      ],
+      "disparity_ratio": 1.41,
+      "flags": []
+    },
+    {
+      "slice_name": "season",
+      "groups": [
+        {
+          "group": "fall",
+          "count": 2332512,
+          "representation_pct": 28.39,
+          "mean_demand": 1.137,
+          "median_demand": 0.0,
+          "zero_demand_pct": 65.3
+        },
+        {
+          "group": "spring",
+          "count": 1962984,
+          "representation_pct": 23.9,
+          "mean_demand": 0.876,
+          "median_demand": 0.0,
+          "zero_demand_pct": 70.1
+        },
+        {
+          "group": "summer",
+          "count": 2358144,
+          "representation_pct": 28.71,
+          "mean_demand": 1.171,
+          "median_demand": 0.0,
+          "zero_demand_pct": 64.1
+        },
+        {
+          "group": "winter",
+          "count": 1560882,
+          "representation_pct": 19.0,
+          "mean_demand": 0.48,
+          "median_demand": 0.0,
+          "zero_demand_pct": 78.7
+        }
+      ],
+      "disparity_ratio": 2.44,
+      "flags": []
+    },
+    {
+      "slice_name": "station_capacity",
+      "groups": [
+        {
+          "group": "low_cap",
+          "count": 30766,
+          "representation_pct": 0.37,
+          "mean_demand": 0.187,
+          "median_demand": 0.0,
+          "zero_demand_pct": 87.2
+        },
+        {
+          "group": "mid_cap",
+          "count": 7060797,
+          "representation_pct": 85.96,
+          "mean_demand": 0.812,
+          "median_demand": 0.0,
+          "zero_demand_pct": 71.3
+        },
+        {
+          "group": "high_cap",
+          "count": 1122959,
+          "representation_pct": 13.67,
+          "mean_demand": 1.909,
+          "median_demand": 0.0,
+          "zero_demand_pct": 51.5
+        }
+      ],
+      "disparity_ratio": 10.21,
+      "flags": [
+        "High disparity ratio (10.21x) exceeds threshold (5.0x)",
+        "Group 'low_cap' underrepresented: 0.37% < 2.0%"
+      ]
+    },
+    {
+      "slice_name": "precipitation",
+      "groups": [
+        {
+          "group": "dry",
+          "count": 6971366,
+          "representation_pct": 84.87,
+          "mean_demand": 0.984,
+          "median_demand": 0.0,
+          "zero_demand_pct": 68.1
+        },
+        {
+          "group": "rainy",
+          "count": 1243156,
+          "representation_pct": 15.13,
+          "mean_demand": 0.824,
+          "median_demand": 0.0,
+          "zero_demand_pct": 71.5
+        }
+      ],
+      "disparity_ratio": 1.19,
+      "flags": []
+    },
+    {
+      "slice_name": "temperature",
+      "groups": [
+        {
+          "group": "cold",
+          "count": 3314004,
+          "representation_pct": 40.34,
+          "mean_demand": 0.617,
+          "median_demand": 0.0,
+          "zero_demand_pct": 75.2
+        },
+        {
+          "group": "hot",
+          "count": 671772,
+          "representation_pct": 8.18,
+          "mean_demand": 1.739,
+          "median_demand": 0.0,
+          "zero_demand_pct": 55.0
+        },
+        {
+          "group": "mild",
+          "count": 4228746,
+          "representation_pct": 51.48,
+          "mean_demand": 1.104,
+          "median_demand": 0.0,
+          "zero_demand_pct": 65.6
+        }
+      ],
+      "disparity_ratio": 2.82,
+      "flags": []
+    }
+  ],
+  "total_flags": 2
+}

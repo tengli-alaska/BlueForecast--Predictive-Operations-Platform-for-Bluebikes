@@ -1,0 +1,433 @@
+"""
+Airflow-callable wrapper functions for the BlueForecast model pipeline.
+
+OBSERVABILITY:
+  _update_pipeline_status() — writes current.json to GCS on every task start/end.
+  _write_crash_log()        — writes a structured crash JSON to GCS on failure only.
+
+PRODUCTION LOG STRATEGY:
+  Success runs leave no persistent logs beyond current.json (overwritten each run).
+  Only failures produce stored crash artifacts (auto-deleted after 30 days via GCS lifecycle).
+"""
+
+import json
+import logging
+import traceback
+from datetime import datetime, timezone
+
+import mlflow
+import numpy as np
+from google.cloud import storage
+
+logger = logging.getLogger("model_pipeline.tasks")
+logger.setLevel(logging.INFO)
+
+BUCKET = "bluebikes-demand-predictor-data"
+STATUS_GCS_PATH  = "processed/pipeline-status/current.json"
+CRASH_GCS_PREFIX = "processed/pipeline-logs/crashes"
+
+TASK_ORDER = [
+    "validate_data_input",
+    "train_and_evaluate",
+    "detect_bias_and_sensitivity",
+    "register_and_predict",
+]
+
+# Observability helpers
+
+def _update_pipeline_status(
+    dag_run_id: str,
+    task_name:  str,
+    status:     str,
+    run_id:     str | None = None,
+    **metrics,
+) -> None:
+    try:
+        gcs     = storage.Client()
+        blob    = gcs.bucket(BUCKET).blob(STATUS_GCS_PATH)
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        if blob.exists():
+            current = json.loads(blob.download_as_text())
+        else:
+            current = {
+                "dag_run_id":     dag_run_id,
+                "run_id":         None,
+                "overall_status": "running",
+                "started_at":     now_iso,
+                "updated_at":     now_iso,
+                "tasks": {t: {"status": "pending"} for t in TASK_ORDER},
+                "metrics": {
+                    "val_rmse": None, "test_rmse": None,
+                    "bias_status": None, "registry_version": None,
+                },
+            }
+
+        task_entry = current["tasks"].setdefault(task_name, {})
+        task_entry["status"] = status
+        if status == "running":
+            task_entry["started_at"] = now_iso
+        elif status in ("success", "failed"):
+            task_entry["completed_at"] = now_iso
+            task_entry.update(metrics)
+
+        if run_id:
+            current["run_id"] = run_id
+        current["updated_at"] = now_iso
+        current["dag_run_id"] = dag_run_id
+
+        statuses = [v.get("status") for v in current["tasks"].values()]
+        if "failed" in statuses:
+            current["overall_status"] = "failed"
+        elif all(s == "success" for s in statuses):
+            current["overall_status"] = "success"
+        else:
+            current["overall_status"] = "running"
+
+        for k in ("val_rmse", "test_rmse", "bias_status", "registry_version"):
+            if k in metrics:
+                current["metrics"][k] = metrics[k]
+
+        blob.upload_from_string(
+            json.dumps(current, indent=2, default=str),
+            content_type="application/json",
+        )
+    except Exception as exc:
+        logger.warning("_update_pipeline_status failed (non-fatal): %s", exc)
+
+
+def _write_crash_log(
+    task_id: str, dag_run_id: str, exception: Exception,
+    context: dict, run_id: str | None = None,
+) -> None:
+    try:
+        tb_lines = traceback.format_exc().splitlines()
+        crash_log = {
+            "task_id": task_id, "dag_run_id": dag_run_id, "run_id": run_id,
+            "exception_type": type(exception).__name__,
+            "exception_message": str(exception),
+            "traceback_tail": tb_lines[-20:],
+            "execution_date": str(context.get("execution_date")),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        path = f"{CRASH_GCS_PREFIX}/{dag_run_id}_{task_id}.json"
+        storage.Client().bucket(BUCKET).blob(path).upload_from_string(
+            json.dumps(crash_log, indent=2, default=str),
+            content_type="application/json",
+        )
+        logger.error("Crash log written → gs://%s/%s", BUCKET, path)
+    except Exception as log_exc:
+        logger.error("_write_crash_log itself failed: %s", log_exc)
+
+
+def _dag_run_id(context: dict) -> str:
+    return str(context.get("dag_run").run_id if context.get("dag_run") else "local")
+
+
+# Task 1 — Validate incoming feature matrix
+
+def task_validate_data_input(**context) -> dict:
+    dag_run_id = _dag_run_id(context)
+    _update_pipeline_status(dag_run_id, "validate_data_input", "running")
+    try:
+        from model_pipeline.data_loader import load_feature_matrix
+        from model_pipeline.trainer import _setup_mlflow
+
+        _setup_mlflow()
+        df, dataset_hash, _le = load_feature_matrix()
+
+        context["ti"].xcom_push(key="dataset_hash", value=dataset_hash)
+        context["ti"].xcom_push(key="dataset_rows",  value=len(df))
+
+        _update_pipeline_status(
+            dag_run_id, "validate_data_input", "success",
+            dataset_hash=dataset_hash, dataset_rows=len(df),
+        )
+        logger.info("Data validation passed. Hash: %s | Rows: %s", dataset_hash, f"{len(df):,}")
+        return {"status": "ok", "dataset_hash": dataset_hash, "rows": len(df)}
+
+    except Exception as exc:
+        _write_crash_log("validate_data_input", dag_run_id, exc, context)
+        _update_pipeline_status(dag_run_id, "validate_data_input", "failed")
+        logger.error("task_validate_data_input failed: %s", exc)
+        raise
+
+
+# Task 2 — Train model + hold-out evaluation (+ optional Optuna HPO)
+
+def task_train_and_evaluate(**context) -> dict:
+    dag_run_id   = _dag_run_id(context)
+    dataset_hash = context["ti"].xcom_pull(task_ids="validate_data_input", key="dataset_hash")
+    _update_pipeline_status(dag_run_id, "train_and_evaluate", "running")
+    run_id = None
+    try:
+        from model_pipeline.data_loader  import load_feature_matrix, get_X_y, FEATURE_COLS
+        from model_pipeline.splitter     import temporal_split
+        from model_pipeline.trainer      import run_training_pipeline, DEFAULT_PARAMS, _setup_mlflow
+        from model_pipeline.evaluator    import evaluate_on_test
+
+        # Read DAG config for Optuna toggle
+        dag_conf   = (context.get("dag_run").conf or {}) if context.get("dag_run") else {}
+        run_optuna = dag_conf.get("run_optuna", False)
+        optuna_n_trials    = dag_conf.get("optuna_n_trials", 30)
+        optuna_sample_frac = dag_conf.get("optuna_sample_frac", 0.20)
+
+        _setup_mlflow()
+        df, _, _le = load_feature_matrix()
+        train_df, val_df, test_df = temporal_split(df)
+
+        X_train, y_train = get_X_y(train_df)
+        X_val,   y_val   = get_X_y(val_df)
+        X_test,  y_test  = get_X_y(test_df)
+
+        forecaster, run_id = run_training_pipeline(
+            X_train=X_train, y_train=y_train,
+            X_val=X_val,     y_val=y_val,
+            feature_cols=FEATURE_COLS,
+            dataset_version_hash=dataset_hash,
+            params=DEFAULT_PARAMS.copy(),
+            run_optuna=run_optuna,
+            optuna_n_trials=optuna_n_trials,
+            optuna_sample_frac=optuna_sample_frac,
+        )
+
+        val_summary = evaluate_on_test(
+            forecaster=forecaster,
+            X_test=X_test,
+            y_test=y_test,
+            run_id=run_id,
+            dataset_version_hash=dataset_hash,
+        )
+
+        val_rmse  = val_summary["metrics"]["test_rmse"]
+        test_rmse = val_rmse
+
+        context["ti"].xcom_push(key="run_id",   value=run_id)
+        context["ti"].xcom_push(key="val_rmse", value=val_rmse)
+
+        _update_pipeline_status(
+            dag_run_id, "train_and_evaluate", "success",
+            run_id=run_id, val_rmse=val_rmse, test_rmse=test_rmse,
+        )
+        logger.info("Training complete. run_id=%s | test_rmse=%.4f", run_id[:8], val_rmse)
+        return {"run_id": run_id, "test_rmse": val_rmse, "validation_status": "PASSED"}
+
+    except Exception as exc:
+        _write_crash_log("train_and_evaluate", dag_run_id, exc, context, run_id=run_id)
+        _update_pipeline_status(dag_run_id, "train_and_evaluate", "failed", run_id=run_id)
+        logger.error("task_train_and_evaluate failed: %s", exc)
+        raise
+
+# Task 3 — Bias detection + sensitivity + visualizations
+
+def task_detect_bias_and_sensitivity(**context) -> dict:
+    dag_run_id   = _dag_run_id(context)
+    run_id       = context["ti"].xcom_pull(task_ids="train_and_evaluate",  key="run_id")
+    logger.info("DEBUG run_id pulled from XCom: %s", run_id)
+    dataset_hash = context["ti"].xcom_pull(task_ids="validate_data_input", key="dataset_hash")
+    _update_pipeline_status(dag_run_id, "detect_bias_and_sensitivity", "running", run_id=run_id)
+    try:
+        from model_pipeline.data_loader    import load_feature_matrix, get_X_y, FEATURE_COLS
+        from model_pipeline.splitter       import temporal_split
+        from model_pipeline.trainer        import XGBoostForecaster, DEFAULT_PARAMS, _setup_mlflow
+        from model_pipeline.bias_detection import detect_model_bias
+        from model_pipeline.sensitivity    import run_sensitivity_analysis
+        from model_pipeline.visualizations import generate_all_plots
+
+        dag_conf              = (context.get("dag_run").conf or {}) if context.get("dag_run") else {}
+        skip_hyperparam_sweep = dag_conf.get("skip_hyperparam_sweep", True)
+        run_bayesian_search   = dag_conf.get("run_bayesian_search",   False)
+
+        _setup_mlflow()
+        import xgboost as xgb
+        import tempfile
+        import os
+
+        # Load model from GCS via MLflow artifact path
+        gcs_client = storage.Client()
+        bucket = gcs_client.bucket(BUCKET)
+        model_path = None
+        for blob in bucket.list_blobs(prefix="mlflow-artifacts/1/models/"):
+            if blob.name.endswith("MLmodel"):
+                content = blob.download_as_text()
+                if f"run_id: {run_id}" in content:
+                    model_path = blob.name.replace("MLmodel", "model.ubj")
+                    break
+
+        if model_path is None:
+            raise RuntimeError(f"Could not find model.ubj for run_id={run_id}")
+
+        logger.info("Loading model from GCS: %s", model_path)
+        with tempfile.NamedTemporaryFile(suffix=".ubj", delete=False) as tmp:
+            tmp_path = tmp.name
+        bucket.blob(model_path).download_to_filename(tmp_path)
+        xgb_model = xgb.XGBRegressor()
+        xgb_model.load_model(tmp_path)
+        os.unlink(tmp_path)
+        forecaster = XGBoostForecaster()
+        forecaster._model = xgb_model
+        forecaster.set_feature_names(FEATURE_COLS)
+
+        df, _, _le = load_feature_matrix()
+        train_df, val_df, test_df = temporal_split(df)
+        X_train, y_train = get_X_y(train_df)
+        X_val,   y_val   = get_X_y(val_df)
+        X_test,  y_test  = get_X_y(test_df)
+
+        # Bias detection
+        bias_report = detect_model_bias(
+            forecaster=forecaster,
+            X_test=X_test, y_test=y_test,
+            run_id=run_id,
+            dataset_version_hash=dataset_hash,
+        )
+        bias_status = bias_report["bias_status"]
+
+        # Sensitivity analysis
+        sensitivity_report = run_sensitivity_analysis(
+            forecaster=forecaster,
+            X_train=X_train, y_train=y_train,
+            X_val=X_val,     y_val=y_val,
+            X_test=X_test,
+            feature_cols=FEATURE_COLS,
+            run_id=run_id,
+            dataset_version_hash=dataset_hash,
+            base_params=DEFAULT_PARAMS,
+            skip_hyperparam_sweep=skip_hyperparam_sweep,
+            run_bayesian_search=run_bayesian_search,
+        )
+
+        # Generate result visualizations
+        shap_importance = sensitivity_report.get("feature_importance", {}).get("shap_mean_abs")
+        gain_importance = sensitivity_report.get("feature_importance", {}).get("xgboost_gain")
+        generate_all_plots(
+            forecaster=forecaster,
+            X_test=X_test, y_test=y_test,
+            feature_cols=FEATURE_COLS,
+            run_id=run_id,
+            shap_importance=shap_importance,
+            gain_importance=gain_importance,
+            bias_report=bias_report,
+        )
+
+        # Drift detection (informational — reference=train/val, current=test)
+        drift_status = "UNKNOWN"
+        try:
+            from model_pipeline.drift_detector import run_drift_detection_pipeline
+
+            sample_size = min(10_000, len(X_train), len(X_test))
+            rng = np.random.default_rng(42)
+            ref_idx = rng.choice(len(X_train), size=sample_size, replace=False)
+            cur_idx = rng.choice(len(X_test),  size=sample_size, replace=False)
+
+            # Val errors = historical baseline; test errors = current window
+            ref_errors = np.abs(
+                y_val.values[:sample_size] - forecaster.predict(X_val.values[:sample_size])
+            )
+            cur_errors = np.abs(
+                y_test.iloc[cur_idx].values - forecaster.predict(X_test.iloc[cur_idx].values)
+            )
+
+            drift_report = run_drift_detection_pipeline(
+                reference_features=X_train.iloc[ref_idx],
+                reference_target=y_train.iloc[ref_idx].values,
+                reference_errors=ref_errors,
+                current_features=X_test.iloc[cur_idx],
+                current_target=y_test.iloc[cur_idx].values,
+                current_errors=cur_errors,
+            )
+            drift_status = "ALERT" if drift_report["overall_drift_detected"] else "STABLE"
+
+            # Write drift_report.json to GCS
+            drift_gcs_path = f"processed/models/{run_id}/drift_report.json"
+            storage.Client().bucket(BUCKET).blob(drift_gcs_path).upload_from_string(
+                json.dumps(drift_report, indent=2, default=str),
+                content_type="application/json",
+            )
+
+            # Tag MLflow run with drift summary
+            _client = mlflow.tracking.MlflowClient()
+            _client.set_tag(run_id, "drift_status", drift_status)
+            _client.set_tag(run_id, "drift_report_gcs", f"gs://{BUCKET}/{drift_gcs_path}")
+            _client.set_tag(run_id, "feature_drift_detected",
+                            str(drift_report["feature_drift"]["drift_detected"]))
+            _client.set_tag(run_id, "performance_drift_detected",
+                            str(drift_report["performance_drift"]["drift_detected"]))
+            _client.set_tag(run_id, "target_drift_detected",
+                            str(drift_report["target_drift"]["drift_detected"]))
+            logger.info("Drift detection complete. drift_status=%s", drift_status)
+
+        except Exception as drift_exc:
+            # Drift detection is informational — never crash the pipeline
+            logger.warning("Drift detection failed (non-fatal): %s", drift_exc)
+
+        context["ti"].xcom_push(key="bias_status", value=bias_status)
+        _update_pipeline_status(
+            dag_run_id, "detect_bias_and_sensitivity", "success",
+            run_id=run_id, bias_status=bias_status,
+        )
+        logger.info("Bias + sensitivity + visualizations complete. bias_status=%s", bias_status)
+        return {"bias_status": bias_status}
+
+    except Exception as exc:
+        _write_crash_log("detect_bias_and_sensitivity", dag_run_id, exc, context, run_id=run_id)
+        _update_pipeline_status(dag_run_id, "detect_bias_and_sensitivity", "failed", run_id=run_id)
+        logger.error("task_detect_bias_and_sensitivity failed: %s", exc)
+        raise
+
+# Task 4 — Registry push + prediction output
+
+def task_register_and_predict(**context) -> dict:
+    dag_run_id   = _dag_run_id(context)
+    run_id       = context["ti"].xcom_pull(task_ids="train_and_evaluate",  key="run_id")
+    val_rmse     = context["ti"].xcom_pull(task_ids="train_and_evaluate",  key="val_rmse")
+    dataset_hash = context["ti"].xcom_pull(task_ids="validate_data_input", key="dataset_hash")
+    _update_pipeline_status(dag_run_id, "register_and_predict", "running", run_id=run_id)
+    try:
+        from model_pipeline.registry  import register_model
+        from model_pipeline.predictor import run_prediction_pipeline
+        from model_pipeline.trainer   import _setup_mlflow
+
+        _setup_mlflow()
+        logger.info("DEBUG: Loading model for run_id = %s", run_id)
+        client = mlflow.tracking.MlflowClient()
+        run    = client.get_run(run_id)
+
+        def _load_gcs_json(gcs_uri: str) -> dict:
+            path = gcs_uri.replace(f"gs://{BUCKET}/", "")
+            blob = storage.Client().bucket(BUCKET).blob(path)
+            return json.loads(blob.download_as_text())
+
+        validation_summary = _load_gcs_json(run.data.tags["validation_summary_gcs"])
+        bias_report        = _load_gcs_json(run.data.tags["bias_report_gcs"])
+
+        registry_meta    = register_model(
+            run_id=run_id,
+            val_rmse=val_rmse,
+            dataset_version_hash=dataset_hash,
+            validation_summary=validation_summary,
+            bias_report=bias_report,
+        )
+        registry_version = registry_meta["registry_version"]
+
+        run_prediction_pipeline()
+        predictions_gcs = f"gs://{BUCKET}/processed/predictions/latest/predictions.parquet"
+
+        context["ti"].xcom_push(key="registry_version", value=int(registry_version))
+        context["ti"].xcom_push(key="predictions_gcs",  value=predictions_gcs)
+
+        _update_pipeline_status(
+            dag_run_id, "register_and_predict", "success",
+            run_id=run_id,
+            registry_version=registry_version,
+            predictions_gcs=predictions_gcs,
+        )
+        logger.info("Pipeline complete. Registry v%s | Predictions → %s",
+                    registry_version, predictions_gcs)
+        return {"registry_version": registry_version, "predictions_gcs": predictions_gcs}
+
+    except Exception as exc:
+        _write_crash_log("register_and_predict", dag_run_id, exc, context, run_id=run_id)
+        _update_pipeline_status(dag_run_id, "register_and_predict", "failed", run_id=run_id)
+        logger.error("task_register_and_predict failed: %s", exc)
+        raise
