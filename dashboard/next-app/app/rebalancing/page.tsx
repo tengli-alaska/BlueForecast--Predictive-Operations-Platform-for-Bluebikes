@@ -8,6 +8,7 @@ import StatusBadge from "@/components/shared/StatusBadge";
 import DataBadge from "@/components/shared/DataBadge";
 import RebalancingMapWrapper from "@/components/map/RebalancingMapWrapper";
 import { getStations, getPredictions } from "@/data";
+import { deriveStationStatuses } from "@/lib/utils";
 import { mockStationStatuses, mockRebalancingRoutes } from "@/data/mock/rebalancing";
 import type { Station, Prediction, StationStatus, RebalancingRoute } from "@/types";
 
@@ -80,42 +81,6 @@ const ROUTE_NAMES: Record<string, string> = {
   "route-gamma": "Truck Gamma",
 };
 
-/* ------------------------------------------------------------------ */
-/*  Derive station risk from real predictions                          */
-/* ------------------------------------------------------------------ */
-function deriveStationStatuses(stations: Station[], predictions: Prediction[]): StationStatus[] {
-  const demandByStation: Record<string, number[]> = {};
-  for (const p of predictions) {
-    if (!demandByStation[p.station_id]) demandByStation[p.station_id] = [];
-    demandByStation[p.station_id].push(p.predicted_demand);
-  }
-
-  return stations.slice(0, 60).map((s) => {
-    const demands = demandByStation[s.station_id] ?? [];
-    const avg = demands.length > 0 ? demands.reduce((a, b) => a + b, 0) / demands.length : 1;
-    const peak = demands.length > 0 ? Math.max(...demands) : avg;
-
-    // Estimate fill based on demand signal (high demand → likely to empty)
-    const fill_pct = Math.min(95, Math.max(5, Math.round(50 - (avg - 1) * 15)));
-    const current_bikes = Math.round((fill_pct / 100) * s.capacity);
-
-    let risk_level: StationStatus["risk_level"] = "moderate";
-    if (fill_pct < 15 || peak > 5) risk_level = "critical";
-    else if (fill_pct < 30 || avg > 3) risk_level = "low";
-    else if (fill_pct > 85) risk_level = "surplus";
-
-    return {
-      station_id: s.station_id,
-      current_bikes,
-      capacity: s.capacity,
-      fill_pct,
-      predicted_demand_1h: parseFloat(avg.toFixed(1)),
-      predicted_demand_6h: parseFloat((avg * 4.5).toFixed(1)),
-      risk_level,
-      net_flow_1h: risk_level === "critical" ? -Math.ceil(avg) : risk_level === "surplus" ? Math.ceil(avg * 0.5) : 0,
-    };
-  });
-}
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -214,7 +179,7 @@ export default function RebalancingPage() {
             <DataBadge isLive={dataIsLive} />
           </div>
           <p className="text-[13px] text-slate-500">
-            {activeTrucks} trucks active · {totalBikesMoved} bikes in transit · {criticalCount} critical stations
+            {criticalCount} stations need bikes now · {stationStatuses.filter(s => s.risk_level === "surplus").length} stations overfull · {ROUTES.length} routes suggested by model
           </p>
           {!dataIsLive && (
             <p className="text-[11px] text-amber-400/70 mt-1">
