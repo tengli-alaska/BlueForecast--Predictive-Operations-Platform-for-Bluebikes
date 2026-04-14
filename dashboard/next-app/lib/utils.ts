@@ -1,3 +1,5 @@
+import type { Station, Prediction, StationStatus } from "@/types";
+
 export function formatNumber(value: number, decimals = 2): string {
   return value.toLocaleString("en-US", {
     minimumFractionDigits: decimals,
@@ -54,4 +56,47 @@ export function getStatusColor(status: string): string {
 
 export function clampDemandSize(demand: number, min = 6, max = 20): number {
   return Math.min(max, Math.max(min, demand * 3 + min));
+}
+
+// Shared station risk derivation — used by Overview and Rebalancing pages.
+// Derives predicted risk from real model predictions. This is NOT live dock
+// occupancy; it is demand-forecast-based risk. Label it as such in the UI.
+export function deriveStationStatuses(
+  stations: Station[],
+  predictions: Prediction[],
+  limit = 60,
+): StationStatus[] {
+  const demandByStation: Record<string, number[]> = {};
+  for (const p of predictions) {
+    if (!demandByStation[p.station_id]) demandByStation[p.station_id] = [];
+    demandByStation[p.station_id].push(p.predicted_demand);
+  }
+
+  return stations.slice(0, limit).map((s) => {
+    const demands = demandByStation[s.station_id] ?? [];
+    const avg = demands.length > 0 ? demands.reduce((a, b) => a + b, 0) / demands.length : 1;
+    const peak = demands.length > 0 ? Math.max(...demands) : avg;
+
+    const fill_pct = Math.min(95, Math.max(5, Math.round(50 - (avg - 1) * 15)));
+    const current_bikes = Math.round((fill_pct / 100) * s.capacity);
+
+    let risk_level: StationStatus["risk_level"] = "moderate";
+    if (fill_pct < 15 || peak > 5) risk_level = "critical";
+    else if (fill_pct < 30 || avg > 3) risk_level = "low";
+    else if (fill_pct > 85) risk_level = "surplus";
+
+    return {
+      station_id: s.station_id,
+      current_bikes,
+      capacity: s.capacity,
+      fill_pct,
+      predicted_demand_1h: parseFloat(avg.toFixed(1)),
+      predicted_demand_6h: parseFloat((avg * 4.5).toFixed(1)),
+      risk_level,
+      net_flow_1h:
+        risk_level === "critical" ? -Math.ceil(avg)
+        : risk_level === "surplus" ? Math.ceil(avg * 0.5)
+        : 0,
+    };
+  });
 }
