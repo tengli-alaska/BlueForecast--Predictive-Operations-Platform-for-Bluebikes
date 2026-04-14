@@ -33,25 +33,15 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
-
-      - name: Build & push API image
-        working-directory: dashboard/api
-        run: |
-          IMAGE=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.API_SERVICE }}:${{ github.sha }}
-          docker build -t $IMAGE .
-          docker push $IMAGE
-          echo "API_IMAGE=$IMAGE" >> $GITHUB_ENV
-
-      - name: Build & push Dashboard image
-        working-directory: dashboard/next-app
-        run: |
-          IMAGE=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.DASHBOARD_SERVICE }}:${{ github.sha }}
-          docker build \
-            --build-arg NEXT_PUBLIC_API_URL=https://blueforecast-api-mem5htpgca-ue.a.run.app \
-            -t $IMAGE .
-          docker push $IMAGE
-          echo "DASHBOARD_IMAGE=$IMAGE" >> $GITHUB_ENV
+        env:
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          REGION: ${{ env.REGION }}
+          REGISTRY: ${{ env.REGISTRY }}
+          REPO: ${{ env.REPO }}
+          API_SERVICE: ${{ env.API_SERVICE }}
+          DASHBOARD_SERVICE: ${{ env.DASHBOARD_SERVICE }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: bash deployment-pipeline/scripts/deploy_dashboard.sh build-push
 
   # -----------------------------------------------------------------
   # Job 2: Deploy to Cloud Run (runs after images are pushed)
@@ -68,62 +58,18 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
 
       - name: Deploy API to Cloud Run
-        run: |
-          gcloud run deploy ${{ env.API_SERVICE }} \
-            --image=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.API_SERVICE }}:${{ github.sha }} \
-            --platform=managed \
-            --region=${{ env.REGION }} \
-            --allow-unauthenticated \
-            --memory=512Mi \
-            --cpu=1 \
-            --min-instances=0 \
-            --max-instances=3 \
-            --port=8000 \
-            --set-env-vars="GCS_BUCKET=bluebikes-demand-predictor-data,GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }}" \
-            --quiet
-
-      - name: Get API URL
-        run: |
-          API_URL=$(gcloud run services describe ${{ env.API_SERVICE }} \
-            --region=${{ env.REGION }} \
-            --format='value(status.url)')
-          echo "API_URL=$API_URL" >> $GITHUB_ENV
-          echo "API deployed at: $API_URL"
-
-      - name: Deploy Dashboard to Cloud Run
-        run: |
-          gcloud run deploy ${{ env.DASHBOARD_SERVICE }} \
-            --image=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.DASHBOARD_SERVICE }}:${{ github.sha }} \
-            --platform=managed \
-            --region=${{ env.REGION }} \
-            --allow-unauthenticated \
-            --memory=512Mi \
-            --cpu=1 \
-            --min-instances=0 \
-            --max-instances=3 \
-            --set-env-vars="NEXT_PUBLIC_API_URL=${{ env.API_URL }}" \
-            --quiet
-
-      - name: Get Dashboard URL
-        run: |
-          DASHBOARD_URL=$(gcloud run services describe ${{ env.DASHBOARD_SERVICE }} \
-            --region=${{ env.REGION }} \
-            --format='value(status.url)')
-          echo "DASHBOARD_URL=$DASHBOARD_URL" >> $GITHUB_ENV
-          echo "Dashboard deployed at: $DASHBOARD_URL"
-
-      - name: Update API with Dashboard URL (CORS)
-        run: |
-          gcloud run services update ${{ env.API_SERVICE }} \
-            --region=${{ env.REGION }} \
-            --update-env-vars="DASHBOARD_URL=${{ env.DASHBOARD_URL }}" \
-            --quiet
+        env:
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          REGION: ${{ env.REGION }}
+          REGISTRY: ${{ env.REGISTRY }}
+          REPO: ${{ env.REPO }}
+          API_SERVICE: ${{ env.API_SERVICE }}
+          DASHBOARD_SERVICE: ${{ env.DASHBOARD_SERVICE }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: bash deployment-pipeline/scripts/deploy_dashboard.sh deploy
 
       - name: Verify deployment
-        run: |
-          echo "=== Verifying API health ==="
-          curl -sf ${{ env.API_URL }}/api/health || echo "WARNING: Health check failed"
-          echo ""
-          echo "=== Deployment Complete ==="
-          echo "API:       ${{ env.API_URL }}"
-          echo "Dashboard: ${{ env.DASHBOARD_URL }}"
+        env:
+          API_URL: ${{ env.API_URL }}
+          DASHBOARD_URL: ${{ env.DASHBOARD_URL }}
+        run: bash deployment-pipeline/scripts/verify_deployment.sh

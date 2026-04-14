@@ -20,12 +20,10 @@ import { mockDriftStable, mockDriftAlert } from "./mock/drift-report";
 import { mockPipelineStatus } from "./mock/pipeline-status";
 import { mockStationStatuses, mockRebalancingRoutes, mockDemandHeatmap } from "./mock/rebalancing";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchJson<T>(path: string, fallback: T): Promise<any> {
   try {
-    const res = await fetch(`${API}${path}`, { cache: "no-store" });
+    const res = await fetch(path, { cache: "no-store" });
     if (!res.ok) throw new Error(`${res.status}`);
     return await res.json();
   } catch {

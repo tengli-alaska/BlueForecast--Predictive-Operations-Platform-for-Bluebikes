@@ -15,15 +15,13 @@ const pageTitles: Record<string, string> = {
   "/pipeline": "Pipeline Status",
 };
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 export default function TopBar() {
   const pathname = usePathname();
   const title = pageTitles[pathname] ?? "BlueForecast";
   const [isLive, setIsLive] = useState<boolean | null>(null);
 
   useEffect(() => {
-    fetch(`${API}/api/health`, { cache: "no-store" })
+    fetch("/api/health", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setIsLive(d.gcs_connected === true))
       .catch(() => setIsLive(false));
