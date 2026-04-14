@@ -1,0 +1,213 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1f2937;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --accent-blue: #3b82f6;
+  --accent-green: #22c55e;
+  --accent-yellow: #eab308;
+  --accent-red: #ef4444;
+  --accent-orange: #f97316;
+  --accent-purple: #a855f7;
+  --accent-cyan: #06b6d4;
+  --border: #1e293b;
+}
+
+@theme inline {
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-green: var(--accent-green);
+  --color-accent-yellow: var(--accent-yellow);
+  --color-accent-red: var(--accent-red);
+  --color-accent-orange: var(--accent-orange);
+  --color-accent-purple: var(--accent-purple);
+  --color-accent-cyan: var(--accent-cyan);
+  --color-border: var(--border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+}
+
+/* Leaflet marker pulse for high-demand stations */
+@keyframes marker-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.marker-high-demand {
+  animation: marker-pulse 2s infinite;
+}
+
+/* Leaflet popup dark-theme overrides */
+.leaflet-popup-content-wrapper {
+  background: transparent !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 8px !important;
+  padding: 0 !important;
+}
+.leaflet-popup-content {
+  margin: 0 !important;
+  line-height: inherit !important;
+}
+.leaflet-popup-tip {
+  background: #1f2937 !important;
+}
+
+/* ===== Premium Design Utilities ===== */
+
+/* Glassmorphism utilities */
+.glass {
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-hover:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Subtle grid background */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 80px 80px;
+}
+
+/* Gradient text utility */
+.text-gradient {
+  background: linear-gradient(135deg, #3b82f6 0%, #a855f7 50%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effects */
+.glow-blue { box-shadow: 0 0 20px rgba(59, 130, 246, 0.15); }
+.glow-green { box-shadow: 0 0 20px rgba(34, 197, 94, 0.15); }
+.glow-red { box-shadow: 0 0 20px rgba(239, 68, 68, 0.15); }
+.glow-purple { box-shadow: 0 0 20px rgba(168, 85, 247, 0.15); }
+
+/* Smooth scroll for the main content area */
+.smooth-scroll {
+  scroll-behavior: smooth;
+}
+
+/* Premium section spacing */
+.section-premium {
+  padding: 2rem 1.5rem;
+}
+@media (min-width: 768px) {
+  .section-premium { padding: 3rem 2rem; }
+}
+
+/* Animated gradient background */
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.animated-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+/* ===== Color-Tinted Glass Variants ===== */
+.glass-blue {
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  background: linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(255,255,255,0.03) 100%);
+  border: 1px solid rgba(59,130,246,0.15);
+}
+.glass-green {
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  background: linear-gradient(135deg, rgba(34,197,94,0.08) 0%, rgba(255,255,255,0.03) 100%);
+  border: 1px solid rgba(34,197,94,0.15);
+}
+.glass-red {
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  background: linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(255,255,255,0.03) 100%);
+  border: 1px solid rgba(239,68,68,0.15);
+}
+.glass-purple {
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  background: linear-gradient(135deg, rgba(168,85,247,0.08) 0%, rgba(255,255,255,0.03) 100%);
+  border: 1px solid rgba(168,85,247,0.15);
+}
+.glass-orange {
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  background: linear-gradient(135deg, rgba(249,115,22,0.08) 0%, rgba(255,255,255,0.03) 100%);
+  border: 1px solid rgba(249,115,22,0.15);
+}
+.glass-cyan {
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  background: linear-gradient(135deg, rgba(6,182,212,0.08) 0%, rgba(255,255,255,0.03) 100%);
+  border: 1px solid rgba(6,182,212,0.15);
+}
+
+/* ===== Enhanced Glow Utilities ===== */
+.glow-blue-strong { box-shadow: 0 0 20px rgba(59,130,246,0.2), 0 0 40px rgba(59,130,246,0.1); }
+.glow-green-strong { box-shadow: 0 0 20px rgba(34,197,94,0.2), 0 0 40px rgba(34,197,94,0.1); }
+.glow-red-strong { box-shadow: 0 0 20px rgba(239,68,68,0.2), 0 0 40px rgba(239,68,68,0.1); }
+.glow-purple-strong { box-shadow: 0 0 20px rgba(168,85,247,0.2), 0 0 40px rgba(168,85,247,0.1); }
+.glow-orange-strong { box-shadow: 0 0 20px rgba(249,115,22,0.2), 0 0 40px rgba(249,115,22,0.1); }
+.glow-cyan-strong { box-shadow: 0 0 20px rgba(6,182,212,0.2), 0 0 40px rgba(6,182,212,0.1); }
+
+/* ===== Animated Gradient Border ===== */
+@keyframes border-rotate {
+  0% { --angle: 0deg; }
+  100% { --angle: 360deg; }
+}
+@property --angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* ===== Premium Typography ===== */
+.heading-premium {
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+.heading-section {
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+/* ===== Gradient Divider ===== */
+.divider-gradient {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+}

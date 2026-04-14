@@ -1,0 +1,38 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# BlueForecast Edge Deployment — Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+model:
+  name: "BlueForecast-Demand"
+  format: "ONNX"
+  file: "blueforecast.onnx"
+  champion_run_id: "7a8b836caadb47b29215eeeb1c440734"
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  workers: 1              # Edge = single worker
+
+inference:
+  max_batch_size: 100     # Max stations per batch request
+  timeout_seconds: 5
+  clamp_negative: true    # Demand predictions can't be < 0
+
+monitoring:
+  health_check_path: "/health"
+  log_level: "INFO"
+
+# Source model location (for export script reference)
+source:
+  gcs_bucket: "bluebikes-demand-predictor-data"
+  model_path: "processed/models/"
+  approved_metadata: "processed/models/approved/metadata.json"
+  mlflow_experiment: "BlueForecast-Demand"
+
+# Training metrics (from approved model)
+metrics:
+  test_rmse: 1.28654
+  test_mae: 0.650969
+  test_r2: 0.702187
+  validation_status: "PASSED"
+  bias_status: "PASSED"

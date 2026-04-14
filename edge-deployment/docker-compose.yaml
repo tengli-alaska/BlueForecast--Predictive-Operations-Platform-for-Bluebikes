@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# BlueForecast Edge Deployment — Docker Compose
+# ─────────────────────────────────────────────────────────────────────────────
+# Usage:
+#   docker compose up --build        # Build and start
+#   docker compose up -d             # Start in background
+#   docker compose down              # Stop and remove
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  edge-inference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blueforecast-edge
+    ports:
+      - "8080:8080"
+    environment:
+      - MODEL_DIR=/app/model
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M    # Edge-friendly memory limit
+          cpus: "1.0"     # Single CPU core
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

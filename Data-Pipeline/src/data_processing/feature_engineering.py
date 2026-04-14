@@ -59,7 +59,12 @@ def _build_station_lookup(trips_sample, stations):
       1. Exact name match between trip data and station metadata
       2. Nearest-neighbour coordinate match (within COORD_THRESHOLD_M)
 
-    Returns a DataFrame with columns [start_station_id, capacity].
+    Returns a DataFrame with columns:
+      [start_station_id, station_name, gbfs_station_id, lat, lon, capacity]
+
+    The gbfs_station_id column bridges the operational trip IDs (A32xxx)
+    to the GBFS UUID station IDs used in stations.parquet, enabling the
+    dashboard to join predictions with station metadata.
     """
     trip_stations = (
         trips_sample
@@ -73,11 +78,12 @@ def _build_station_lookup(trips_sample, stations):
 
     # --- Strategy 1: exact name match ---
     name_matched = trip_stations.merge(
-        stations[["station_name", "capacity"]],
+        stations[["station_id", "station_name", "lat", "lon", "capacity"]],
         left_on="start_station_name",
         right_on="station_name",
         how="left"
-    )[["start_station_id", "capacity"]]
+    ).rename(columns={"station_id": "gbfs_station_id"})
+    name_matched = name_matched[["start_station_id", "station_name", "gbfs_station_id", "lat", "lon", "capacity"]]
 
     matched_mask = name_matched["capacity"].notna()
     logger.info("Name-matched stations: %d", matched_mask.sum())
@@ -93,20 +99,25 @@ def _build_station_lookup(trips_sample, stations):
         dist_deg, idx = tree.query([row["start_lat"], row["start_lng"]])
         dist_m = dist_deg * 111_000
         if dist_m <= COORD_THRESHOLD_M:
+            matched_station = stations.iloc[idx]
             coord_rows.append({
                 "start_station_id": row["start_station_id"],
-                "capacity": stations.iloc[idx]["capacity"]
+                "station_name":     matched_station["station_name"],
+                "gbfs_station_id":  matched_station["station_id"],
+                "lat":              matched_station["lat"],
+                "lon":              matched_station["lon"],
+                "capacity":         matched_station["capacity"],
             })
             logger.debug("Coord match: %s → %s (%.0fm)",
                          row["start_station_name"],
-                         stations.iloc[idx]["station_name"],
+                         matched_station["station_name"],
                          dist_m)
         else:
             logger.debug("No match (%.0fm > threshold): %s",
                          dist_m, row["start_station_name"])
 
     coord_matched = pd.DataFrame(coord_rows) if coord_rows else pd.DataFrame(
-        columns=["start_station_id", "capacity"]
+        columns=["start_station_id", "station_name", "gbfs_station_id", "lat", "lon", "capacity"]
     )
     logger.info("Coordinate-matched stations: %d", len(coord_matched))
 
@@ -197,6 +208,15 @@ def feature_engineering(**kwargs):
     station_lookup = _build_station_lookup(trips_sample, stations)
     del trips_sample, stations
     gc.collect()
+
+    # Save station ID mapping for dashboard (bridges A32xxx → GBFS UUIDs)
+    mapping_buf = io.BytesIO()
+    station_lookup.to_parquet(mapping_buf, index=False)
+    mapping_buf.seek(0)
+    client.bucket(BUCKET).blob("processed/stations/station_id_mapping.parquet").upload_from_file(
+        mapping_buf, content_type="application/octet-stream"
+    )
+    logger.info("Station ID mapping uploaded: %d stations", len(station_lookup))
 
     df = df.merge(station_lookup, on="start_station_id", how="left")
 
