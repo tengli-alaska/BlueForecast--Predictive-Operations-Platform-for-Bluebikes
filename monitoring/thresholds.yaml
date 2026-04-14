@@ -1,0 +1,85 @@
+# thresholds.yaml
+# Configuration for BlueForecast monitoring thresholds.
+# Adjust these values based on acceptable model performance for your use case.
+
+monitoring:
+
+  # ── Data Drift (Evidently AI) ──────────────────────────────────────────────
+  data_drift:
+    # Fraction of features that must drift to trigger an alert (0.0 - 1.0)
+    drift_share_threshold: 0.25
+    # Minimum number of drifted columns to trigger an alert
+    min_drifted_columns: 3
+    # Statistical test used by Evidently AI
+    # Options: ks (Kolmogorov-Smirnov), wasserstein, psi, chisquare
+    stat_test: ks
+    # p-value threshold for drift detection
+    stat_test_threshold: 0.05
+
+  # ── Concept Drift (RMSE increase) ─────────────────────────────────────────
+  concept_drift:
+    # Relative RMSE increase over training baseline to trigger alert (0.0 - 1.0)
+    # 0.30 means if recent RMSE is 30% higher than training RMSE → alert
+    rmse_increase_threshold: 0.30
+    # Minimum number of recent predictions required for concept drift check
+    min_samples: 100
+
+  # ── Rolling Performance ────────────────────────────────────────────────────
+  performance:
+    # 7-day rolling RMSE must stay below (baseline_rmse * this multiplier)
+    rmse_multiplier_threshold: 1.50
+    # 7-day rolling MAE alert threshold (absolute trips/hour)
+    mae_absolute_threshold: 4.0
+    # Minimum sample count needed to compute rolling metrics
+    min_samples_7d: 50
+
+  # ── Retraining Cooldown ────────────────────────────────────────────────────
+  retraining:
+    # Minimum days between automatic retraining runs
+    cooldown_days: 3
+    # Model must improve RMSE by at least this fraction to be promoted
+    # e.g. 0.02 = new model must be at least 2% better than production
+    promotion_threshold: 0.02
+
+  # ── Monitoring Schedule ────────────────────────────────────────────────────
+  schedule:
+    # Airflow cron for monitoring DAG (every 6 hours)
+    monitoring_cron: "0 */6 * * *"
+    # Days of recent predictions to use for drift detection
+    drift_lookback_days: 7
+    # Days of predictions to use for performance metrics
+    performance_lookback_days: 7
+
+# ── Notification Settings ──────────────────────────────────────────────────
+notifications:
+  slack:
+    enabled: true
+    # Set SLACK_WEBHOOK_URL in environment / GitHub Actions secrets
+    webhook_env_var: SLACK_WEBHOOK_URL
+    # Alert on these event types
+    events:
+      - drift_detected
+      - retrain_triggered
+      - model_promoted
+      - model_not_promoted
+      - performance_degraded
+
+  email:
+    enabled: false
+    # Set NOTIFY_EMAIL, SMTP_HOST, SMTP_USER, SMTP_PASS in environment
+    events:
+      - drift_detected
+      - retrain_triggered
+      - model_promoted
+
+# ── GCS Paths ─────────────────────────────────────────────────────────────
+gcs:
+  bucket: bluebikes-demand-predictor-data
+  paths:
+    feature_matrix:      processed/features/feature_matrix.parquet
+    predictions:         processed/predictions/
+    drift_report:        processed/reports/drift_latest.json
+    performance_report:  processed/reports/performance_latest.json
+    last_retrain:        processed/reports/last_retrain.json
+    production_model:    models/production/
+    production_metadata: models/production/metadata.json

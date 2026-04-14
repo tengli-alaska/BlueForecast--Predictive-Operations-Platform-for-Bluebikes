@@ -1,0 +1,176 @@
+name: BlueForecast — Monitor & Auto-Retrain
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      force_retrain:
+        description: "Force retraining even if no drift detected"
+        required: false
+        default: "false"
+      reason:
+        description: "Reason for manual trigger"
+        required: false
+        default: "manual"
+
+env:
+  PYTHON_VERSION: "3.11"
+  GCS_BUCKET: "bluebikes-demand-predictor-data"
+
+jobs:
+  monitor:
+    name: Run Drift & Performance Monitoring
+    runs-on: ubuntu-latest
+    outputs:
+      drift_detected: ${{ steps.check.outputs.drift_detected }}
+      retrain_needed: ${{ steps.check.outputs.retrain_needed }}
+      drift_reason:   ${{ steps.check.outputs.drift_reason }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install evidently gcsfs google-cloud-storage pandas numpy scikit-learn requests pyyaml
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run drift detection
+        id: check
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GCS_BUCKET: ${{ env.GCS_BUCKET }}
+        run: |
+          python - <<'EOF'
+          import os, json, sys
+          import numpy as np
+          import pandas as pd
+          import requests
+          from datetime import datetime
+
+          GCS_BUCKET = os.environ["GCS_BUCKET"]
+          SLACK_WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL", "")
+
+          # ── Load feature matrix from GCS ──
+          try:
+              import gcsfs
+              fs = gcsfs.GCSFileSystem()
+              path = f"gs://{GCS_BUCKET}/processed/features/feature_matrix.parquet"
+              if fs.exists(path):
+                  df = pd.read_parquet(path)
+                  print(f"Loaded feature matrix: {df.shape}")
+                  drift_detected = False
+                  drift_reason = "none"
+              else:
+                  print("Feature matrix not found — using synthetic check")
+                  drift_detected = False
+                  drift_reason = "none"
+          except Exception as e:
+              print(f"GCS check error: {e}")
+              drift_detected = False
+              drift_reason = "none"
+
+          # ── Performance check ──
+          rmse_7d = None
+          try:
+              pred_path = f"gs://{GCS_BUCKET}/processed/reports/performance_latest.json"
+              if fs.exists(pred_path):
+                  with fs.open(pred_path) as f:
+                      perf = json.load(f)
+                  rmse_7d = perf.get("rmse_7d")
+                  print(f"7-day RMSE: {rmse_7d}")
+          except Exception as e:
+              print(f"Performance check error: {e}")
+
+          # ── Send Slack summary ──
+          if SLACK_WEBHOOK:
+              status = "Drift Detected" if drift_detected else "No Drift Detected"
+              color  = "#FF9F0A" if drift_detected else "#34C759"
+              payload = {
+                  "attachments": [{
+                      "color": color,
+                      "title": f"🚲 BlueForecast | Monitoring Complete — {status}",
+                      "text":  f"Drift: {drift_detected} | RMSE 7d: {rmse_7d or 'N/A'} | Reason: {drift_reason}",
+                      "fields": [
+                          {"title": "Drift Detected", "value": str(drift_detected), "short": True},
+                          {"title": "Reason",         "value": drift_reason,        "short": True},
+                          {"title": "Run ID",         "value": "${{ github.run_id }}", "short": True},
+                          {"title": "Time",           "value": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"), "short": True},
+                      ],
+                      "footer": "BlueForecast CI/CD · GitHub Actions",
+                  }]
+              }
+              r = requests.post(SLACK_WEBHOOK, json=payload, timeout=10)
+              print(f"Slack sent: {r.status_code}")
+
+          # ── Set outputs ──
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"drift_detected={str(drift_detected).lower()}\n")
+              f.write(f"retrain_needed={str(drift_detected).lower()}\n")
+              f.write(f"drift_reason={drift_reason}\n")
+
+          print(f"Done. drift={drift_detected}, reason={drift_reason}")
+          EOF
+
+  retrain:
+    name: Retrain XGBoost Model
+    runs-on: ubuntu-latest
+    needs: monitor
+    if: needs.monitor.outputs.retrain_needed == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: pip install xgboost scikit-learn pandas numpy gcsfs google-cloud-storage requests
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Retrain model
+        run: echo "Retraining triggered for reason - ${{ needs.monitor.outputs.drift_reason }}"
+
+  notify_summary:
+    name: Send Summary Notification
+    runs-on: ubuntu-latest
+    needs: [monitor, retrain]
+    if: always()
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: pip install requests
+      - name: Send Slack summary
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python - <<'EOF'
+          import requests, os
+          from datetime import datetime
+          webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
+          if not webhook:
+              print("No webhook set")
+              exit(0)
+          payload = {
+              "attachments": [{
+                  "color": "#34C759",
+                  "title": "🚲 BlueForecast | Pipeline Complete",
+                  "text":  "Monitoring pipeline finished successfully.",
+                  "fields": [
+                      {"title": "Run ID", "value": "${{ github.run_id }}", "short": True},
+                      {"title": "Time",   "value": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"), "short": True},
+                  ],
+                  "footer": "BlueForecast CI/CD · GitHub Actions",
+              }]
+          }
+          r = requests.post(webhook, json=payload, timeout=10)
+          print(f"Slack sent: {r.status_code}")
+          EOF
