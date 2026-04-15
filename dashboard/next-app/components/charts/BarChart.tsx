@@ -11,7 +11,8 @@ import {
   Cell,
 } from "recharts";
 import ChartContainer from "@/components/shared/ChartContainer";
-import { COLORS } from "@/lib/constants";
+import { COLORS, getChartColors } from "@/lib/constants";
+import { useTheme } from "@/components/ThemeProvider";
 
 interface BarChartProps {
   data: { name: string; value: number; color?: string }[];
@@ -50,6 +51,8 @@ export default function BarChart({
   horizontal = false,
   valueFormatter,
 }: BarChartProps) {
+  const { theme } = useTheme();
+  const C = getChartColors(theme);
   const defaultColor = COLORS.blue;
 
   if (horizontal) {
@@ -61,40 +64,26 @@ export default function BarChart({
             layout="vertical"
             margin={{ top: 10, right: 30, left: 100, bottom: 10 }}
           >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke={COLORS.border}
-              horizontal={false}
-            />
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
             <XAxis
               type="number"
-              tick={{ fill: COLORS.textSecondary, fontSize: 12 }}
-              axisLine={{ stroke: COLORS.border }}
-              tickLine={{ stroke: COLORS.border }}
+              tick={{ fill: C.textSecondary, fontSize: 12 }}
+              axisLine={{ stroke: C.border }}
+              tickLine={{ stroke: C.border }}
               tickFormatter={valueFormatter}
             />
             <YAxis
               type="category"
               dataKey="name"
-              tick={{ fill: COLORS.textSecondary, fontSize: 12 }}
-              axisLine={{ stroke: COLORS.border }}
-              tickLine={{ stroke: COLORS.border }}
+              tick={{ fill: C.textSecondary, fontSize: 12 }}
+              axisLine={{ stroke: C.border }}
+              tickLine={{ stroke: C.border }}
               width={90}
             />
-            <Tooltip
-              content={<CustomTooltip formatter={valueFormatter} />}
-            />
-            <Bar
-              dataKey="value"
-              radius={[0, 4, 4, 0]}
-              isAnimationActive={true}
-              animationDuration={800}
-            >
+            <Tooltip content={<CustomTooltip formatter={valueFormatter} />} />
+            <Bar dataKey="value" radius={[0, 4, 4, 0]} isAnimationActive animationDuration={800}>
               {data.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={entry.color || defaultColor}
-                />
+                <Cell key={`cell-${index}`} fill={entry.color || defaultColor} />
               ))}
             </Bar>
           </RechartsBarChart>
@@ -106,40 +95,27 @@ export default function BarChart({
   return (
     <ChartContainer title={title}>
       <ResponsiveContainer width="100%" height={350}>
-        <RechartsBarChart
-          data={data}
-          margin={{ top: 10, right: 30, left: 20, bottom: 20 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
+        <RechartsBarChart data={data} margin={{ top: 10, right: 30, left: 20, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
           <XAxis
             dataKey="name"
-            tick={{ fill: COLORS.textSecondary, fontSize: 12 }}
-            axisLine={{ stroke: COLORS.border }}
-            tickLine={{ stroke: COLORS.border }}
+            tick={{ fill: C.textSecondary, fontSize: 12 }}
+            axisLine={{ stroke: C.border }}
+            tickLine={{ stroke: C.border }}
             angle={-30}
             textAnchor="end"
             height={60}
           />
           <YAxis
-            tick={{ fill: COLORS.textSecondary, fontSize: 12 }}
-            axisLine={{ stroke: COLORS.border }}
-            tickLine={{ stroke: COLORS.border }}
+            tick={{ fill: C.textSecondary, fontSize: 12 }}
+            axisLine={{ stroke: C.border }}
+            tickLine={{ stroke: C.border }}
             tickFormatter={valueFormatter}
           />
-          <Tooltip
-            content={<CustomTooltip formatter={valueFormatter} />}
-          />
-          <Bar
-            dataKey="value"
-            radius={[4, 4, 0, 0]}
-            isAnimationActive={true}
-            animationDuration={800}
-          >
+          <Tooltip content={<CustomTooltip formatter={valueFormatter} />} />
+          <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive animationDuration={800}>
             {data.map((entry, index) => (
-              <Cell
-                key={`cell-${index}`}
-                fill={entry.color || defaultColor}
-              />
+              <Cell key={`cell-${index}`} fill={entry.color || defaultColor} />
             ))}
           </Bar>
         </RechartsBarChart>

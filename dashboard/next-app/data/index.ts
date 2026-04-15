@@ -9,6 +9,7 @@ import type {
   StationStatus,
   RebalancingRoute,
   DemandHeatmapEntry,
+  CostAnalysis,
 } from "@/types";
 
 import { mockStations } from "./mock/stations";
@@ -19,6 +20,7 @@ import { mockBiasReport } from "./mock/bias-report";
 import { mockDriftStable, mockDriftAlert } from "./mock/drift-report";
 import { mockPipelineStatus } from "./mock/pipeline-status";
 import { mockStationStatuses, mockRebalancingRoutes, mockDemandHeatmap } from "./mock/rebalancing";
+import { mockCostAnalysis } from "./mock/cost-analysis";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchJson<T>(path: string, fallback: T): Promise<any> {
@@ -203,4 +205,8 @@ export async function getRebalancingRoutes(): Promise<RebalancingRoute[]> {
 
 export async function getDemandHeatmap(): Promise<DemandHeatmapEntry[]> {
   return mockDemandHeatmap;
+}
+
+export async function getCostAnalysis(): Promise<CostAnalysis> {
+  return mockCostAnalysis;
 }

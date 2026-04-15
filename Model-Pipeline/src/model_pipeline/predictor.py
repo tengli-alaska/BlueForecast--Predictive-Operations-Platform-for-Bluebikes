@@ -35,11 +35,9 @@ import holidays
 import numpy as np
 import pandas as pd
 from google.cloud import storage
-from mlflow.tracking import MlflowClient
 from sklearn.preprocessing import LabelEncoder
 
 from model_pipeline.data_loader import FEATURE_COLS, load_feature_matrix
-from model_pipeline.trainer import _setup_mlflow
 
 logger = logging.getLogger("model_pipeline.predictor")
 logger.setLevel(logging.INFO)

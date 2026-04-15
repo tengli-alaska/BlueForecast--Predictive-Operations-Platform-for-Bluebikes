@@ -79,6 +79,35 @@ export default function DriftPage() {
         </p>
       </div>
 
+      {/* Scenario Toggle */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-text-secondary font-medium">Scenario:</span>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setScenario("stable")}
+            className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium border transition-all duration-200 ${
+              scenario === "stable"
+                ? "bg-accent-blue/20 text-accent-blue border-accent-blue/40 shadow-[0_0_15px_rgba(59,130,246,0.15)]"
+                : "bg-bg-secondary text-text-secondary border-white/[0.06] hover:bg-bg-tertiary"
+            }`}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Stable
+          </button>
+          <button
+            onClick={() => setScenario("alert")}
+            className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium border transition-all duration-200 ${
+              scenario === "alert"
+                ? "bg-accent-blue/20 text-accent-blue border-accent-blue/40 shadow-[0_0_15px_rgba(59,130,246,0.15)]"
+                : "bg-bg-secondary text-text-secondary border-white/[0.06] hover:bg-bg-tertiary"
+            }`}
+          >
+            <ShieldAlert className="h-4 w-4" />
+            Alert
+          </button>
+        </div>
+      </div>
+
       {/* Status Banner */}
       <AnimatePresence mode="wait">
         <motion.div
@@ -87,7 +116,7 @@ export default function DriftPage() {
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.97 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className={`rounded-2xl border p-6 flex items-center gap-4 backdrop-blur-xl bg-white/[0.03] shadow-[0_8px_32px_rgba(0,0,0,0.3)] ${
+          className={`rounded-2xl border p-6 flex items-center gap-4 backdrop-blur-xl bg-bg-secondary shadow-[0_8px_32px_rgba(0,0,0,0.3)] ${
             isAlert
               ? "border-red-500/40"
               : "border-green-500/40"
@@ -149,7 +178,7 @@ export default function DriftPage() {
             {/* Feature Drift */}
             <motion.div
               variants={cardVariants}
-              className="rounded-2xl border border-white/[0.08] border-l-4 border-l-blue-500 backdrop-blur-xl bg-white/[0.05] p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+              className="rounded-2xl border border-white/[0.08] border-l-4 border-l-blue-500 backdrop-blur-xl bg-bg-tertiary p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
             >
               <div className="flex items-center gap-2 mb-4">
                 <BarChart3 className="h-5 w-5 text-blue-400" />
@@ -219,7 +248,7 @@ export default function DriftPage() {
             {/* Performance Drift */}
             <motion.div
               variants={cardVariants}
-              className="rounded-2xl border border-white/[0.08] border-l-4 border-l-orange-500 backdrop-blur-xl bg-white/[0.05] p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+              className="rounded-2xl border border-white/[0.08] border-l-4 border-l-orange-500 backdrop-blur-xl bg-bg-tertiary p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
             >
               <div className="flex items-center gap-2 mb-4">
                 <Activity className="h-5 w-5 text-orange-400" />
@@ -296,7 +325,7 @@ export default function DriftPage() {
             {/* Target Drift */}
             <motion.div
               variants={cardVariants}
-              className="rounded-2xl border border-white/[0.08] border-l-4 border-l-purple-500 backdrop-blur-xl bg-white/[0.05] p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+              className="rounded-2xl border border-white/[0.08] border-l-4 border-l-purple-500 backdrop-blur-xl bg-bg-tertiary p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
             >
               <div className="flex items-center gap-2 mb-4">
                 <Target className="h-5 w-5 text-purple-400" />

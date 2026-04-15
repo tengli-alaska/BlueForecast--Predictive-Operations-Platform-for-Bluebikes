@@ -150,7 +150,7 @@ export default function BiasPage() {
                         },
                       }
                     : {})}
-                  className={`backdrop-blur-xl bg-white/[0.05] rounded-2xl p-5 border shadow-[0_8px_32px_rgba(0,0,0,0.3)] ${
+                  className={`backdrop-blur-xl bg-bg-tertiary rounded-2xl p-5 border shadow-[0_8px_32px_rgba(0,0,0,0.3)] ${
                     hasFlagGlow
                       ? "border-red-500/30"
                       : "border-white/[0.08]"
@@ -175,7 +175,7 @@ export default function BiasPage() {
                   <div className="space-y-0">
                     {slice.groups.map((g, gIdx) => (
                       <div key={g.group}>
-                        <div className="rounded-lg px-3 py-2.5 hover:bg-white/[0.06] transition-colors">
+                        <div className="rounded-lg px-3 py-2.5 hover:bg-bg-tertiary transition-colors">
                           <div className="flex items-center justify-between mb-1.5">
                             <span className="text-sm font-medium text-text-primary capitalize">
                               {g.group.replace(/_/g, " ")}

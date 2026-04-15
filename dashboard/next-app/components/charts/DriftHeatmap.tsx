@@ -2,7 +2,8 @@
 
 import { motion } from "framer-motion";
 import ChartContainer from "@/components/shared/ChartContainer";
-import { COLORS } from "@/lib/constants";
+import { COLORS, getChartColors } from "@/lib/constants";
+import { useTheme } from "@/components/ThemeProvider";
 import { formatNumber } from "@/lib/utils";
 
 interface DriftHeatmapProps {
@@ -27,6 +28,7 @@ export default function DriftHeatmap({
   threshold,
 }: DriftHeatmapProps) {
   const entries = Object.entries(driftScores).sort(([, a], [, b]) => b - a);
+  // DriftHeatmap uses bg classes not COLORS directly — no chart color changes needed
 
   return (
     <ChartContainer title="Feature Drift Scores">

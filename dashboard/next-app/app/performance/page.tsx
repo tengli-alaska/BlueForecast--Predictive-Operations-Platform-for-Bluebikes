@@ -262,14 +262,14 @@ export default function PerformancePage() {
       {/* Middle Row: Scatter Plot + Residual Histogram */}
       <ScrollReveal>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="relative overflow-hidden rounded-xl backdrop-blur-xl bg-white/[0.03] border border-white/[0.06] shadow-2xl shadow-black/20">
+          <div className="relative overflow-hidden rounded-xl backdrop-blur-xl bg-bg-secondary border border-white/[0.06] shadow-2xl shadow-black/20">
             <div
               className="pointer-events-none absolute inset-x-0 top-0 h-px"
               style={{ background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%)" }}
             />
             <ScatterPlot data={scatterData} />
           </div>
-          <div className="relative overflow-hidden rounded-xl backdrop-blur-xl bg-white/[0.03] border border-white/[0.06] shadow-2xl shadow-black/20">
+          <div className="relative overflow-hidden rounded-xl backdrop-blur-xl bg-bg-secondary border border-white/[0.06] shadow-2xl shadow-black/20">
             <div
               className="pointer-events-none absolute inset-x-0 top-0 h-px"
               style={{ background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%)" }}
@@ -288,7 +288,7 @@ export default function PerformancePage() {
 
       {/* Bottom: Metric Progression Chart */}
       <ScrollReveal>
-        <div className="relative overflow-hidden rounded-xl backdrop-blur-xl bg-white/[0.03] border border-white/[0.06] shadow-2xl shadow-black/20">
+        <div className="relative overflow-hidden rounded-xl backdrop-blur-xl bg-bg-secondary border border-white/[0.06] shadow-2xl shadow-black/20">
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-px"
             style={{ background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%)" }}
@@ -306,7 +306,7 @@ export default function PerformancePage() {
 
       {/* Validation Gates Table */}
       <ScrollReveal>
-        <div className="relative overflow-hidden rounded-2xl backdrop-blur-xl bg-white/[0.05] border border-white/[0.06] p-6 shadow-2xl shadow-black/20">
+        <div className="relative overflow-hidden rounded-2xl backdrop-blur-xl bg-bg-tertiary border border-white/[0.06] p-6 shadow-2xl shadow-black/20">
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-px"
             style={{ background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%)" }}
@@ -317,7 +317,7 @@ export default function PerformancePage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-white/[0.04]">
+                <tr className="bg-bg-secondary">
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-text-secondary uppercase tracking-wider rounded-tl-lg">
                     Metric
                   </th>
@@ -332,7 +332,7 @@ export default function PerformancePage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-[var(--border)]">
                 {validationGates.map((gate) => (
                   <tr
                     key={gate.metric}

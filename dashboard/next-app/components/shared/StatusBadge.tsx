@@ -41,7 +41,7 @@ export default function StatusBadge({ status, label }: StatusBadgeProps) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[11px] font-medium ${config.text}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-bg-secondary px-2 py-0.5 text-[11px] font-medium ${config.text}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${config.dot}`} />
       {label ?? config.defaultLabel}

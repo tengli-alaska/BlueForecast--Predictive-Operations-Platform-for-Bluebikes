@@ -151,3 +151,44 @@ export interface DemandHeatmapEntry {
   day: string;
   demand: number;
 }
+
+export interface InfraService {
+  name: string;
+  id: string;
+  region: string;
+  memory: string | null;
+  cpu: string | null;
+  min_instances: number | null;
+  max_instances: number | null;
+  note: string;
+  est_monthly_low_usd: number;
+  est_monthly_high_usd: number;
+}
+
+export interface TrainingDuration {
+  mode: string;
+  duration: string;
+  est_cost_usd_low: number;
+  est_cost_usd_high: number;
+}
+
+export interface ExpansionCity {
+  city: string;
+  operator: string;
+  stations: number;
+  trips_annual_est: string;
+  marginal_storage_gb: string;
+  marginal_training_min: string;
+  est_marginal_monthly_low_usd: number;
+  est_marginal_monthly_high_usd: number;
+  notes: string;
+}
+
+export interface CostAnalysis {
+  services: InfraService[];
+  training_durations: TrainingDuration[];
+  est_total_monthly_low_usd: number;
+  est_total_monthly_high_usd: number;
+  boston_context: string;
+  expansion: ExpansionCity[];
+}

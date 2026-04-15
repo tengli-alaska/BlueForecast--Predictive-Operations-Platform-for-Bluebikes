@@ -195,7 +195,7 @@ export default function PipelinePage() {
           <p className="text-xs font-medium uppercase tracking-widest text-text-secondary mb-4">
             EXECUTION FLOW
           </p>
-          <div className="rounded-2xl border border-white/[0.08] backdrop-blur-xl bg-white/[0.03] p-6 overflow-x-auto shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+          <div className="rounded-2xl border border-white/[0.08] backdrop-blur-xl bg-bg-secondary p-6 overflow-x-auto shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
             <div className="flex items-center justify-center gap-0 min-w-[700px]">
               {taskEntries.map(([taskName, task], index) => {
                 const color = TASK_COLORS[taskName] || "#3b82f6";
@@ -219,7 +219,7 @@ export default function PipelinePage() {
                   >
                     {/* Task Node */}
                     <div
-                      className={`flex flex-col items-center rounded-2xl border-2 backdrop-blur-xl bg-white/[0.05] p-4 min-w-[150px] ${glow}`}
+                      className={`flex flex-col items-center rounded-2xl border-2 backdrop-blur-xl bg-bg-tertiary p-4 min-w-[150px] ${glow}`}
                       style={{ borderColor }}
                     >
                       <div
@@ -293,7 +293,7 @@ export default function PipelinePage() {
                 <motion.div
                   key={taskName}
                   variants={cardVariants}
-                  className="rounded-2xl border border-white/[0.08] border-l-4 backdrop-blur-xl bg-white/[0.05] p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+                  className="rounded-2xl border border-white/[0.08] border-l-4 backdrop-blur-xl bg-bg-tertiary p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
                   style={{ borderLeftColor: color }}
                 >
                   <div className="flex items-center gap-2 mb-4">
@@ -345,13 +345,13 @@ export default function PipelinePage() {
           <p className="text-xs font-medium uppercase tracking-widest text-text-secondary mb-4">
             RUN SUMMARY
           </p>
-          <div className="rounded-2xl border border-white/[0.08] backdrop-blur-xl bg-white/[0.05] p-6 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+          <div className="rounded-2xl border border-white/[0.08] backdrop-blur-xl bg-bg-tertiary p-6 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
             <div className="flex items-center gap-2 mb-5">
               <Layers className="h-5 w-5 text-cyan-400" />
               <h3 className="text-base font-semibold text-text-primary">Pipeline Metrics Summary</h3>
             </div>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div className="bg-white/[0.03] rounded-lg px-4 py-3">
+              <div className="bg-bg-secondary rounded-lg px-4 py-3">
                 <p className="text-xs text-text-secondary mb-1">Validation RMSE</p>
                 <p className="text-lg font-bold text-blue-400 font-mono">
                   {pipeline.metrics.val_rmse != null
@@ -359,7 +359,7 @@ export default function PipelinePage() {
                     : "--"}
                 </p>
               </div>
-              <div className="bg-white/[0.03] rounded-lg px-4 py-3">
+              <div className="bg-bg-secondary rounded-lg px-4 py-3">
                 <p className="text-xs text-text-secondary mb-1">Test RMSE</p>
                 <p className="text-lg font-bold text-blue-400 font-mono">
                   {pipeline.metrics.test_rmse != null
@@ -367,7 +367,7 @@ export default function PipelinePage() {
                     : "--"}
                 </p>
               </div>
-              <div className="bg-white/[0.03] rounded-lg px-4 py-3">
+              <div className="bg-bg-secondary rounded-lg px-4 py-3">
                 <p className="text-xs text-text-secondary mb-1">Bias Status</p>
                 <p
                   className={`text-lg font-bold font-mono ${
@@ -379,7 +379,7 @@ export default function PipelinePage() {
                   {pipeline.metrics.bias_status ?? "--"}
                 </p>
               </div>
-              <div className="bg-white/[0.03] rounded-lg px-4 py-3">
+              <div className="bg-bg-secondary rounded-lg px-4 py-3">
                 <p className="text-xs text-text-secondary mb-1">Registry Version</p>
                 <p className="text-lg font-bold text-purple-400 font-mono">
                   v{pipeline.metrics.registry_version ?? "--"}

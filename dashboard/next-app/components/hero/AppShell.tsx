@@ -23,7 +23,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // SSR: render nothing (avoids hydration mismatch from Math.random in hero)
   if (!mounted) {
     return (
-      <div className="flex h-full min-h-screen bg-bg-primary items-center justify-center">
+      <div className="flex h-full min-h-screen bg-bg-primary items-center justify-center transition-colors duration-200">
         <div className="h-6 w-6 rounded-full border-2 border-blue-400/30 border-t-blue-400 animate-spin" />
       </div>
     );
