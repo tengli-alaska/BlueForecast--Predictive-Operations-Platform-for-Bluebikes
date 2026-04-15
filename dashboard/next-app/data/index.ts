@@ -22,10 +22,16 @@ import { mockPipelineStatus } from "./mock/pipeline-status";
 import { mockStationStatuses, mockRebalancingRoutes, mockDemandHeatmap } from "./mock/rebalancing";
 import { mockCostAnalysis } from "./mock/cost-analysis";
 
+// Call API directly (bypasses Next.js proxy which is unreliable on Cloud Run).
+// NEXT_PUBLIC_API_URL is the FastAPI backend URL, set at build time.
+// Falls back to /api/... proxy for local development.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchJson<T>(path: string, fallback: T): Promise<any> {
+  const url = API_BASE ? `${API_BASE}${path}` : path;
   try {
-    const res = await fetch(path, { cache: "no-store" });
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) throw new Error(`${res.status}`);
     return await res.json();
   } catch {
