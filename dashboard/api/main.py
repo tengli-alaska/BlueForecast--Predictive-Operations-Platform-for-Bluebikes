@@ -214,6 +214,26 @@ async def get_station_mapping():
     return df_to_records(df)
 
 
+@app.get("/api/feature-importance")
+async def get_feature_importance():
+    """Return feature importance (XGBoost gain + SHAP) for the current approved run."""
+    run_id = gcs.get_run_id()
+    if not run_id:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "No approved run found"},
+        )
+    data = gcs.read_json(
+        f"processed/models/{run_id}/feature_importance.json", ttl=600
+    )
+    if data is None:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Feature importance data unavailable"},
+        )
+    return data
+
+
 @app.get("/api/pipeline-status")
 async def get_pipeline_status():
     """Return current pipeline execution status."""

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import MapWrapper from "@/components/map/MapWrapper";
 import AnimatedCounter from "@/components/shared/AnimatedCounter";
+import DataBadge from "@/components/shared/DataBadge";
 import { getStations, getPredictions } from "@/data";
 import { formatNumber } from "@/lib/utils";
 import type { Station, Prediction } from "@/types";
@@ -11,6 +12,7 @@ import type { Station, Prediction } from "@/types";
 interface StationsData {
   stations: Station[];
   predictions: Prediction[];
+  isLive: boolean;
 }
 
 export default function StationsPage() {
@@ -22,7 +24,7 @@ export default function StationsPage() {
       getStations(),
       getPredictions(),
     ]).then(([stationsResult, predictionsResult]) => {
-      setData({ stations: stationsResult.data, predictions: predictionsResult.data });
+      setData({ stations: stationsResult.data, predictions: predictionsResult.data, isLive: stationsResult.isLive && predictionsResult.isLive });
     }).finally(() => setLoading(false));
   }, []);
 
@@ -37,7 +39,7 @@ export default function StationsPage() {
     );
   }
 
-  const { stations, predictions } = data;
+  const { stations, predictions, isLive } = data;
 
   const avgCapacity = stations.reduce((sum, s) => sum + s.capacity, 0) / stations.length;
 
@@ -53,7 +55,10 @@ export default function StationsPage() {
       {/* Header with inline stats */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-end justify-between">
         <div>
-          <h1 className="text-[22px] font-semibold text-white tracking-tight">Stations</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-[22px] font-semibold text-white tracking-tight">Stations</h1>
+            <DataBadge isLive={isLive} />
+          </div>
           <p className="text-[13px] text-slate-500 mt-0.5">
             {stations.length} stations across Boston · Avg {formatNumber(avgCapacity, 0)} docks · {highDemandCount} high demand
           </p>

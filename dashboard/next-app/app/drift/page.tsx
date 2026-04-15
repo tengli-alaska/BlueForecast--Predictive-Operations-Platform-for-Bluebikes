@@ -13,6 +13,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { getDriftReport } from "@/data";
+import DataBadge from "@/components/shared/DataBadge";
 import DriftHeatmap from "@/components/charts/DriftHeatmap";
 import StatusBadge from "@/components/shared/StatusBadge";
 import ScrollReveal from "@/components/shared/ScrollReveal";
@@ -36,12 +37,15 @@ const cardVariants = {
 export default function DriftPage() {
   const [scenario, setScenario] = useState<"stable" | "alert">("stable");
   const [report, setReport] = useState<DriftReport | null>(null);
+  const [isLive, setIsLive] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadReport = useCallback((s: "stable" | "alert") => {
     setLoading(true);
     getDriftReport(s).then((r) => {
       setReport(r);
+      // If GCS is live, feature_drift will have real drift_scores keys
+      setIsLive(Object.keys(r.feature_drift?.drift_scores ?? {}).length > 0);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -73,6 +77,7 @@ export default function DriftPage() {
           <h1 className="text-3xl font-bold text-text-primary heading-premium">
             <TextReveal text="Drift Monitoring" />
           </h1>
+          <DataBadge isLive={isLive} liveLabel="LIVE KL-DIV" />
         </div>
         <p className="text-text-secondary max-w-3xl leading-relaxed">
           Continuous monitoring of feature distributions, model performance, and target

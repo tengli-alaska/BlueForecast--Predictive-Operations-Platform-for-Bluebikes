@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Scale, Flag, Users } from "lucide-react";
 import { getBiasReport } from "@/data";
+import DataBadge from "@/components/shared/DataBadge";
 import BiasDisparityChart from "@/components/charts/BiasDisparityChart";
 import AlertBanner from "@/components/shared/AlertBanner";
 import ScrollReveal from "@/components/shared/ScrollReveal";
@@ -39,11 +40,14 @@ function disparityBadge(ratio: number): { bg: string; text: string } {
 
 export default function BiasPage() {
   const [report, setReport] = useState<BiasReport | null>(null);
+  const [isLive, setIsLive] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getBiasReport().then((r) => {
       setReport(r);
+      // getBiasReport falls back to mock only when GCS is unavailable
+      setIsLive(r.total_rows > 0);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -69,6 +73,7 @@ export default function BiasPage() {
           <h1 className="text-3xl font-bold text-text-primary heading-premium">
             <TextReveal text="Bias & Fairness" />
           </h1>
+          <DataBadge isLive={isLive} liveLabel="LIVE ANALYSIS" />
         </div>
         <p className="text-text-secondary max-w-3xl leading-relaxed">
           Fairness analysis across {report.slices.length} data slices covering{" "}
