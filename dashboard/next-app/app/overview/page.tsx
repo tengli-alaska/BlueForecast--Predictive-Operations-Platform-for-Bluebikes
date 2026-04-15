@@ -223,7 +223,7 @@ export default function OverviewPage() {
         >
           <div className="flex items-center justify-between mb-3">
             <p className="text-[13px] font-medium text-white">Top Stations — Predicted Demand Today</p>
-            <DataBadge isLive={predictionsLive} liveLabel="LIVE FORECAST" mockLabel="DEMO DATA" />
+            <DataBadge isLive={predictionsLive} />
           </div>
           <div className="space-y-1.5">
             {topStations.map((s) => (
@@ -294,7 +294,7 @@ export default function OverviewPage() {
               <p className="text-[13px] font-medium text-white">24-Hour Network Demand Forecast</p>
               <p className="text-[11px] text-slate-500 mt-0.5">Total predicted trips across all {stations.length} stations, by hour</p>
             </div>
-            <DataBadge isLive={predictionsLive} liveLabel="LIVE FORECAST" mockLabel="DEMO DATA" />
+            <DataBadge isLive={predictionsLive} />
           </div>
           <div className="flex items-end gap-[3px] h-20">
             {hourlyDemand.map(({ hour, total }) => {

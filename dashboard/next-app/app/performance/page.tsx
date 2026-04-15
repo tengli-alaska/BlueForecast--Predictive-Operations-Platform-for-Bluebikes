@@ -195,7 +195,7 @@ export default function PerformancePage() {
           <h1 className="text-3xl heading-premium font-bold text-text-primary">
             <TextReveal text="Model Performance" />
           </h1>
-          <DataBadge isLive={metricsLive} liveLabel="LIVE METRICS" mockLabel="DEMO METRICS" />
+          <DataBadge isLive={metricsLive} />
         </div>
         <p className="mt-2 text-sm text-text-secondary">
           <TextReveal

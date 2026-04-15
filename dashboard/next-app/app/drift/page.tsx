@@ -68,7 +68,7 @@ export default function DriftPage() {
           <h1 className="text-3xl font-bold text-text-primary heading-premium">
             <TextReveal text="Drift Monitoring" />
           </h1>
-          <DataBadge isLive={isLive} liveLabel="LIVE KL-DIV" />
+          <DataBadge isLive={isLive} />
         </div>
         <p className="text-text-secondary max-w-3xl leading-relaxed">
           KL divergence analysis of feature distributions at training time. Flags when

@@ -266,7 +266,7 @@ export default function RebalancingPage() {
       >
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-white">Truck Routes & Station Risk</h3>
-          <DataBadge isLive={dataIsLive} liveLabel="LIVE RISK" mockLabel="DEMO RISK" />
+          <DataBadge isLive={dataIsLive}  />
         </div>
         <RebalancingMapWrapper
           stations={stationStatuses}
@@ -366,7 +366,7 @@ export default function RebalancingPage() {
                 : "Demo data — showing representative station risk levels"}
             </p>
           </div>
-          <DataBadge isLive={dataIsLive} liveLabel="LIVE PREDICTIONS" mockLabel="DEMO DATA" />
+          <DataBadge isLive={dataIsLive}  />
         </div>
 
         <div className="grid grid-cols-[1fr_140px_80px_80px_80px_60px] gap-2 px-3 pb-2 text-[10px] font-medium text-slate-500 uppercase tracking-wider border-b border-[var(--border)]">

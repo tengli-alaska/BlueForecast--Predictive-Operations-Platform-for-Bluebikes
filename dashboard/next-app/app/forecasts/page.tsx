@@ -109,7 +109,7 @@ export default function ForecastsPage() {
           <h1 className="text-3xl heading-premium font-bold text-text-primary">
             <TextReveal text="Demand Forecasts" />
           </h1>
-          <DataBadge isLive={isLive} liveLabel="LIVE PREDICTIONS" mockLabel="SAMPLE DATA" />
+          <DataBadge isLive={isLive} />
         </div>
         <p className="mt-2 text-sm text-text-secondary">
           <TextReveal

@@ -106,7 +106,7 @@ export default function FeaturesPage() {
           <h1 className="text-3xl font-bold text-text-primary heading-premium">
             <TextReveal text="Feature Importance" />
           </h1>
-          <DataBadge isLive={isLive} liveLabel="LIVE SHAP" mockLabel="SAMPLE DATA" />
+          <DataBadge isLive={isLive} />
         </div>
         <p className="text-text-secondary max-w-3xl leading-relaxed">
           SHAP (SHapley Additive exPlanations) values quantify each feature's marginal

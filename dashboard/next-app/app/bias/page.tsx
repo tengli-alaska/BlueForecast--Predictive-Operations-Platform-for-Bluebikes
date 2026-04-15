@@ -73,7 +73,7 @@ export default function BiasPage() {
           <h1 className="text-3xl font-bold text-text-primary heading-premium">
             <TextReveal text="Bias & Fairness" />
           </h1>
-          <DataBadge isLive={isLive} liveLabel="LIVE ANALYSIS" />
+          <DataBadge isLive={isLive} />
         </div>
         <p className="text-text-secondary max-w-3xl leading-relaxed">
           Fairness analysis across {report.slices.length} data slices covering{" "}
