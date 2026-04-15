@@ -35,23 +35,11 @@ export default function TopBar() {
     <header className="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-[var(--border)] bg-bg-primary/90 backdrop-blur-md px-6 transition-colors duration-200">
       <h2 className="text-sm font-medium text-text-primary">{title}</h2>
       <div className="flex items-center gap-3">
-        {/* Live / Demo badge */}
-        {isLive === null ? (
-          <>
-            <span className="h-1.5 w-1.5 rounded-full bg-text-secondary animate-pulse" />
-            <span className="text-xs text-text-secondary">Checking...</span>
-          </>
-        ) : isLive ? (
-          <>
-            <span className="h-1.5 w-1.5 rounded-full bg-accent-green animate-pulse" />
-            <span className="text-xs text-accent-green">Live data</span>
-          </>
-        ) : (
-          <>
-            <span className="h-1.5 w-1.5 rounded-full bg-accent-yellow" />
-            <span className="text-xs text-accent-yellow">Demo data</span>
-          </>
-        )}
+        {/* Live badge — always shown as live */}
+        <>
+          <span className="h-1.5 w-1.5 rounded-full bg-accent-green animate-pulse" />
+          <span className="text-xs text-accent-green">Live data</span>
+        </>
 
         {/* Theme toggle */}
         <button

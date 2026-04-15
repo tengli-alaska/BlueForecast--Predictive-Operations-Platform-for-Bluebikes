@@ -1,9 +1,9 @@
 import type { Prediction } from "@/types";
 import { mockStations } from "./stations";
 
-const GENERATED_AT = "2024-12-15T06:00:00Z";
-const MODEL_VERSION = 3;
-const FORECAST_START = "2024-12-15T07:00:00-05:00";
+const GENERATED_AT = "2026-04-15T03:36:04Z";
+const MODEL_VERSION = 1;
+const FORECAST_START = "2026-04-15T08:00:00-04:00";
 
 /**
  * Demand multiplier curve for each hour of the day (0-23).
@@ -49,7 +49,7 @@ function seededRandom(seed: number): () => number {
 
 function generatePredictions(): Prediction[] {
   const predictions: Prediction[] = [];
-  const startDate = new Date("2024-12-15T12:00:00Z"); // 7 AM EST = 12:00 UTC
+  const startDate = new Date("2026-04-15T12:00:00Z"); // 8 AM EDT = 12:00 UTC
 
   for (const station of mockStations) {
     // Capacity-based scaling: higher capacity stations see more demand
@@ -65,7 +65,8 @@ function generatePredictions(): Prediction[] {
       // Hour of day in EST (UTC-5)
       const hourOfDay = (forecastDate.getUTCHours() - 5 + 24) % 24;
 
-      const baseDemand = HOURLY_DEMAND_CURVE[hourOfDay] * capacityScale * station.capacity;
+      // Scale to match real data range: max ~2.55, avg ~0.32
+      const baseDemand = HOURLY_DEMAND_CURVE[hourOfDay] * 0.38;
 
       // Add some noise: +/- 15%
       const noise = 1 + (rand() - 0.5) * 0.3;
