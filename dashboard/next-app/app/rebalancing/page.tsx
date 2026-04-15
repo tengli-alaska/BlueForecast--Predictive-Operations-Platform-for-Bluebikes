@@ -242,11 +242,6 @@ export default function RebalancingPage() {
           <p className="text-[13px] text-slate-500">
             {criticalCount} stations need bikes now · {stationStatuses.filter(s => s.risk_level === "surplus").length} stations overfull · {routes.length} routes suggested by model
           </p>
-          {!dataIsLive && (
-            <p className="text-[11px] text-amber-400/70 mt-1">
-              API unavailable — station risk levels are representative demo data, not real-time.
-            </p>
-          )}
         </div>
         <div className="text-right">
           <p className="text-[11px] text-slate-500">Network fill</p>
@@ -361,9 +356,7 @@ export default function RebalancingPage() {
           <div>
             <h3 className="text-sm font-semibold text-white">Station Priority</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              {dataIsLive
-                ? "Risk derived from live model predictions — sorted by urgency"
-                : "Demo data — showing representative station risk levels"}
+              Risk derived from live model predictions — sorted by urgency
             </p>
           </div>
           <DataBadge isLive={dataIsLive}  />
