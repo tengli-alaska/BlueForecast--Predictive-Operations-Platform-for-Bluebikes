@@ -35,8 +35,8 @@ jobs:
         env:
           GCS_BUCKET: ${{ env.GCS_BUCKET }}
           GOOGLE_CLOUD_PROJECT: ${{ env.PROJECT_ID }}
+          PYTHONPATH: Model-Pipeline/src
         run: |
-          cd Model-Pipeline
           python -c "from model_pipeline.predictor import run_prediction_pipeline; run_prediction_pipeline()"
 
       - name: Verify predictions written
