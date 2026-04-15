@@ -379,9 +379,9 @@ export default function RebalancingPage() {
         </div>
 
         <div className="divide-y divide-white/[0.03]">
-          {priorityStations.map((s) => {
+          {priorityStations.map((s, rank) => {
             const info = stationLookup[s.station_id];
-            const name = info?.name ?? s.station_id;
+            const name = info?.name ?? `Station #${rank + 1}`;
             const cap = info?.capacity ?? s.capacity;
             return (
               <div
