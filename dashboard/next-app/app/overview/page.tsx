@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowUpRight, ArrowDownRight, Minus, CheckCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle, AlertTriangle } from "lucide-react";
 import AnimatedCounter from "@/components/shared/AnimatedCounter";
 import MetricLineChart from "@/components/charts/MetricLineChart";
 import DemandHeatmapChart from "@/components/charts/DemandHeatmapChart";
@@ -90,8 +90,6 @@ export default function OverviewPage() {
   const criticalCount = stationStatuses.filter((s) => s.risk_level === "critical").length;
   const avgFill = Math.round(stationStatuses.reduce((a, b) => a + b.fill_pct, 0) / stationStatuses.length);
   const biasFlags = biasReport.slices.flatMap((s) => s.flags);
-  const prevMetrics = allMetrics[allMetrics.length - 2];
-
   const chartData = allMetrics.map((m, i) => ({
     label: `v${i + 1}`,
     rmse: m.test_rmse,
@@ -129,43 +127,7 @@ export default function OverviewPage() {
         {/* ---- Row 1: Ops-friendly KPIs ---- */}
         <motion.div
           custom={0} variants={fade} initial="hidden" animate="visible"
-          className="col-span-3 rounded-xl bg-[#0f1520] p-4"
-        >
-          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Prediction Accuracy</p>
-          <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
-            ±<AnimatedCounter value={latest.test_rmse} decimals={1} suffix=" trips/hr" />
-          </p>
-          <div className="flex items-center gap-1 mt-1.5">
-            {latest.test_rmse < prevMetrics.test_rmse ? (
-              <ArrowDownRight className="h-3 w-3 text-emerald-400/60" />
-            ) : (
-              <ArrowUpRight className="h-3 w-3 text-red-400/60" />
-            )}
-            <span className="text-[11px] text-slate-500">
-              Typical forecast error · {latest.test_rmse < 1.5 ? "Good" : latest.test_rmse < 2.5 ? "Acceptable" : "Review needed"}
-            </span>
-          </div>
-        </motion.div>
-
-        <motion.div
-          custom={1} variants={fade} initial="hidden" animate="visible"
-          className="col-span-3 rounded-xl bg-[#0f1520] p-4"
-        >
-          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Demand Explained</p>
-          <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
-            <AnimatedCounter value={latest.test_r2 * 100} decimals={0} suffix="%" />
-          </p>
-          <div className="flex items-center gap-1 mt-1.5">
-            <ArrowUpRight className="h-3 w-3 text-emerald-400/60" />
-            <span className="text-[11px] text-slate-500">
-              Model captures {(latest.test_r2 * 100).toFixed(0)}% of demand patterns
-            </span>
-          </div>
-        </motion.div>
-
-        <motion.div
-          custom={2} variants={fade} initial="hidden" animate="visible"
-          className="col-span-3 rounded-xl bg-[#0f1520] p-4"
+          className="col-span-6 rounded-xl bg-[#0f1520] p-4"
         >
           <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Stations Need Action</p>
           <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
@@ -181,8 +143,8 @@ export default function OverviewPage() {
         </motion.div>
 
         <motion.div
-          custom={3} variants={fade} initial="hidden" animate="visible"
-          className="col-span-3 rounded-xl bg-[#0f1520] p-4"
+          custom={1} variants={fade} initial="hidden" animate="visible"
+          className="col-span-6 rounded-xl bg-[#0f1520] p-4"
         >
           <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Avg Fill Rate</p>
           <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
