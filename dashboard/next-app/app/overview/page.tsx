@@ -196,7 +196,7 @@ export default function OverviewPage() {
             <AnimatedCounter value={latest.test_r2 * 100} decimals={0} suffix="%" />
           </p>
           <div className="flex items-center gap-1 mt-1.5">
-            <ArrowUpRight className="h-3 w-3 text-emerald-400/60" />
+            <ArrowDownRight className="h-3 w-3 text-emerald-400/60" style={{ transform: "rotate(180deg)" }} />
             <span className="text-[11px] text-slate-500">
               Model captures {(latest.test_r2 * 100).toFixed(0)}% of demand patterns
             </span>
