@@ -332,11 +332,7 @@ def run_prediction_pipeline() -> pd.DataFrame:
         le=le,
     )
 
-    uris = write_predictions_to_gcs(predictions_df)
-
-    client = MlflowClient()
-    client.set_tag(run_id, "predictions_latest_gcs", uris["latest"])
-    client.set_tag(run_id, "predictions_dated_gcs",  uris["dated"])
-    logger.info("Prediction URIs logged to MLflow run %s", run_id[:8])
+    write_predictions_to_gcs(predictions_df)
+    logger.info("Prediction pipeline complete. v%s (run %s)", version_num, run_id[:8])
 
     return predictions_df
