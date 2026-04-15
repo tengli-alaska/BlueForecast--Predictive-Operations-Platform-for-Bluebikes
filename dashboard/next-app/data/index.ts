@@ -49,6 +49,27 @@ export async function getPredictions(stationId?: string, mode: "full" | "summary
   return { data: mock, isLive: false };
 }
 
+/** 24 rows — one per hour — total demand across all stations. Used by Overview 24h chart. */
+export async function getPredictionsNetwork(): Promise<{ data: { hour: number; total: number }[]; isLive: boolean }> {
+  const raw = await fetchJson("/api/predictions?mode=network", null);
+  if (Array.isArray(raw) && raw.length > 0) {
+    return {
+      data: raw.map((r: any) => ({ hour: r.hour as number, total: Math.round(r.total_demand as number) })),
+      isLive: true,
+    };
+  }
+  // Fallback: derive from mock predictions
+  const hourTotals: Record<number, number> = {};
+  for (const p of mockPredictions) {
+    const h = new Date(p.forecast_hour).getHours();
+    hourTotals[h] = (hourTotals[h] ?? 0) + p.predicted_demand;
+  }
+  return {
+    data: Array.from({ length: 24 }, (_, h) => ({ hour: h, total: Math.round(hourTotals[h] ?? 0) })),
+    isLive: false,
+  };
+}
+
 export async function getModelMetrics(): Promise<ModelMetrics[]> {
   return mockModelMetrics;
 }

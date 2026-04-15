@@ -11,6 +11,7 @@ import {
   getDriftReport,
   getStations,
   getPredictions,
+  getPredictionsNetwork,
   getStationMapping,
 } from "@/data";
 import { formatDate, deriveStationStatuses } from "@/lib/utils";
@@ -54,7 +55,8 @@ export default function OverviewPage() {
       getStations(),
       getPredictions(),
       getStationMapping(),
-    ]).then(([latestResult, biasReport, driftReport, stationsResult, predictionsResult, mapping]) => {
+      getPredictionsNetwork(),
+    ]).then(([latestResult, biasReport, driftReport, stationsResult, predictionsResult, mapping, networkResult]) => {
       const stations = stationsResult.data;
       const predictions = predictionsResult.data;
 
@@ -79,16 +81,8 @@ export default function OverviewPage() {
       const nameById: Record<string, string> = {};
       for (const s of stations) nameById[s.station_id] = s.station_name;
 
-      // Aggregate real predictions by forecast hour (0–23) across all stations
-      const hourTotals: Record<number, number> = {};
-      for (const p of predictions) {
-        const h = new Date(p.forecast_hour).getHours();
-        hourTotals[h] = (hourTotals[h] ?? 0) + p.predicted_demand;
-      }
-      const hourlyDemand = Array.from({ length: 24 }, (_, h) => ({
-        hour: h,
-        total: Math.round(hourTotals[h] ?? 0),
-      }));
+      // Use the pre-aggregated network forecast (24 hourly totals) from /api/predictions?mode=network
+      const hourlyDemand = networkResult.data;
 
       // Top stations by total predicted demand — use A32xxx IDs keyed by predictions
       const stationTotals: Record<string, number> = {};
@@ -122,7 +116,7 @@ export default function OverviewPage() {
         topStations,
         metricsLive: latestResult.isLive,
         stationsLive: stationsResult.isLive,
-        predictionsLive: predictionsResult.isLive,
+        predictionsLive: predictionsResult.isLive || networkResult.isLive,
       });
     }).finally(() => setLoading(false));
   }, []);

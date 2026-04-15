@@ -135,7 +135,7 @@ async def get_predictions(
         return df_to_records(df)
 
     if mode == "summary":
-        # Aggregate to one row per station: peak demand hour + avg + total
+        # One row per station: avg + peak demand across 24h
         agg = (
             df.groupby("station_id")
             .agg(
@@ -149,6 +149,21 @@ async def get_predictions(
             .reset_index()
         )
         return df_to_records(agg)
+
+    if mode == "network":
+        # 24 rows — one per hour — total demand across ALL stations
+        # Used by Overview 24h bar chart. Tiny payload (~24 rows).
+        df["hour"] = pd.to_datetime(df["forecast_hour"]).dt.hour
+        hourly = (
+            df.groupby("hour")
+            .agg(
+                total_demand=("predicted_demand", "sum"),
+                forecast_hour=("forecast_hour", "first"),
+            )
+            .reset_index()
+            .sort_values("hour")
+        )
+        return df_to_records(hourly)
 
     return df_to_records(df)
 
