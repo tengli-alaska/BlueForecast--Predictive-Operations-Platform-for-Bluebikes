@@ -44,14 +44,14 @@ function fillBarColor(pct: number): string {
 function createTruckIcon(color: string) {
   return L.divIcon({
     className: "",
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
     html: `<div style="
-      width:32px;height:32px;display:flex;align-items:center;justify-content:center;
-      background:${color};border-radius:50%;border:2px solid rgba(255,255,255,0.3);
-      box-shadow:0 0 12px ${color}80, 0 2px 8px rgba(0,0,0,0.4);
-      font-size:16px;
-    ">🚚</div>`,
+      width:14px;height:14px;border-radius:50%;
+      background:${color};
+      box-shadow:0 0 0 3px ${color}40, 0 0 10px ${color}60;
+      border:2px solid rgba(255,255,255,0.6);
+    "></div>`,
   });
 }
 
@@ -69,28 +69,30 @@ function createStopIcon(action: "pickup" | "dropoff", order: number) {
   });
 }
 
-/* Animated truck that moves along a route */
+/* Route progress indicator — advances one segment every 4 seconds */
 function AnimatedTruck({ route, color }: { route: RebalancingRoute; color: string }) {
-  const map = useMap();
-  const [progress, setProgress] = useState(0);
   const stops = [...route.stops].sort((a, b) => a.order - b.order);
   const positions: [number, number][] = stops.map((s) => [s.lat, s.lon]);
+  const [segIndex, setSegIndex] = useState(0);
+  const [t, setT] = useState(0);
 
   useEffect(() => {
     if (route.status !== "active" || positions.length < 2) return;
+    // Smooth interpolation within each segment (60 steps × ~67ms = ~4s per segment)
+    let step = 0;
+    const STEPS = 60;
     const interval = setInterval(() => {
-      setProgress((p) => (p + 0.003) % 1);
-    }, 50);
+      step = (step + 1);
+      const totalSteps = (positions.length - 1) * STEPS;
+      const overall = step % totalSteps;
+      setSegIndex(Math.min(Math.floor(overall / STEPS), positions.length - 2));
+      setT((overall % STEPS) / STEPS);
+    }, 67);
     return () => clearInterval(interval);
   }, [route.status, positions.length]);
 
   if (route.status !== "active" || positions.length < 2) return null;
 
-  // Interpolate position along the polyline
-  const totalSegments = positions.length - 1;
-  const rawIndex = progress * totalSegments;
-  const segIndex = Math.min(Math.floor(rawIndex), totalSegments - 1);
-  const t = rawIndex - segIndex;
   const lat = positions[segIndex][0] + t * (positions[segIndex + 1][0] - positions[segIndex][0]);
   const lng = positions[segIndex][1] + t * (positions[segIndex + 1][1] - positions[segIndex][1]);
 
@@ -130,7 +132,8 @@ function Legend() {
       ))}
       <div style={{ fontWeight: 600, fontSize: 10, letterSpacing: "0.08em", color: "#64748b", marginTop: 8, marginBottom: 2 }}>TRUCKS</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span>🚚</span><span>Active (animated)</span>
+        <span style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: "#60a5fa", display: "inline-block", border: "2px solid rgba(255,255,255,0.5)" }} />
+        <span>Active (en route)</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ width: 14, height: 2, backgroundColor: "#c084fc", display: "inline-block", borderRadius: 1, border: "1px dashed #c084fc" }} />

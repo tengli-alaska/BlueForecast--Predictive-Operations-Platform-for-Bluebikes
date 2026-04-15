@@ -9,7 +9,7 @@ import DataBadge from "@/components/shared/DataBadge";
 import RebalancingMapWrapper from "@/components/map/RebalancingMapWrapper";
 import { getStations, getPredictions, getStationMapping } from "@/data";
 import { deriveStationStatuses } from "@/lib/utils";
-import { mockStationStatuses, mockRebalancingRoutes } from "@/data/mock/rebalancing";
+import { mockStationStatuses } from "@/data/mock/rebalancing";
 import type { Station, Prediction, StationStatus, RebalancingRoute } from "@/types";
 
 /* ------------------------------------------------------------------ */
@@ -26,16 +26,67 @@ const fadeUp = {
 };
 
 /* ------------------------------------------------------------------ */
-/*  AI-suggested routes (clearly labeled as such)                     */
+/*  Route generation from station priority data                       */
 /* ------------------------------------------------------------------ */
-const ROUTES: RebalancingRoute[] = [
+const TRUCK_NAMES = ["Truck Alpha", "Truck Beta", "Truck Gamma"];
+const TRUCK_STATUSES: RebalancingRoute["status"][] = ["active", "active", "planned"];
+const ESTIMATED_KM = [8.4, 11.2, 6.8];
+const ESTIMATED_MIN = [42, 55, 35];
+
+function buildRoutes(
+  statuses: StationStatus[],
+  lookup: Record<string, { name: string; lat: number; lon: number; capacity: number }>,
+): RebalancingRoute[] {
+  // Split into critical (need bikes) and surplus (too many bikes)
+  const critical = statuses.filter(s => s.risk_level === "critical" && lookup[s.station_id]);
+  const surplus = statuses.filter(s => s.risk_level === "surplus" && lookup[s.station_id]);
+
+  // If no real data, return empty (parent falls back to mock routes)
+  if (critical.length === 0 && surplus.length === 0) return [];
+
+  const routes: RebalancingRoute[] = [];
+  // Distribute critical/surplus stations across 3 truck routes
+  const chunkSize = Math.ceil(Math.max(critical.length, surplus.length) / 3);
+
+  for (let t = 0; t < 3; t++) {
+    const pickups = surplus.slice(t * chunkSize, (t + 1) * chunkSize).slice(0, 3);
+    const dropoffs = critical.slice(t * chunkSize, (t + 1) * chunkSize).slice(0, 3);
+    if (pickups.length === 0 && dropoffs.length === 0) continue;
+
+    const stops = [
+      ...pickups.map((s, i) => {
+        const info = lookup[s.station_id]!;
+        const bikesNeeded = Math.max(1, Math.round(s.capacity * 0.3));
+        return { station_id: s.station_id, station_name: info.name, lat: info.lat, lon: info.lon, action: "pickup" as const, bikes: bikesNeeded, order: i + 1 };
+      }),
+      ...dropoffs.map((s, i) => {
+        const info = lookup[s.station_id]!;
+        const bikesDrop = Math.max(1, Math.round(s.capacity * 0.3));
+        return { station_id: s.station_id, station_name: info.name, lat: info.lat, lon: info.lon, action: "dropoff" as const, bikes: bikesDrop, order: pickups.length + i + 1 };
+      }),
+    ];
+
+    if (stops.length < 2) continue;
+    const bikesMoved = stops.reduce((s, stop) => s + stop.bikes, 0);
+
+    routes.push({
+      route_id: `route-${["alpha", "beta", "gamma"][t]}`,
+      truck_id: `truck-0${t + 1}`,
+      total_distance_km: ESTIMATED_KM[t],
+      estimated_duration_min: ESTIMATED_MIN[t],
+      bikes_moved: bikesMoved,
+      status: TRUCK_STATUSES[t],
+      stops,
+    });
+  }
+  return routes;
+}
+
+// Fallback showcase routes (used when no live data)
+const FALLBACK_ROUTES: RebalancingRoute[] = [
   {
-    route_id: "route-alpha",
-    truck_id: "truck-01",
-    total_distance_km: 8.4,
-    estimated_duration_min: 42,
-    bikes_moved: 18,
-    status: "active",
+    route_id: "route-alpha", truck_id: "truck-01",
+    total_distance_km: 8.4, estimated_duration_min: 42, bikes_moved: 18, status: "active",
     stops: [
       { station_id: "A32036", station_name: "South Station",         lat: 42.3523, lon: -71.0551, action: "pickup",  bikes: 8, order: 1 },
       { station_id: "A32001", station_name: "Back Bay / Stuart St",  lat: 42.3484, lon: -71.0762, action: "dropoff", bikes: 5, order: 2 },
@@ -45,41 +96,26 @@ const ROUTES: RebalancingRoute[] = [
     ],
   },
   {
-    route_id: "route-beta",
-    truck_id: "truck-02",
-    total_distance_km: 11.2,
-    estimated_duration_min: 55,
-    bikes_moved: 22,
-    status: "active",
+    route_id: "route-beta", truck_id: "truck-02",
+    total_distance_km: 11.2, estimated_duration_min: 55, bikes_moved: 22, status: "active",
     stops: [
       { station_id: "A32007", station_name: "Harvard Square",    lat: 42.3735, lon: -71.1218, action: "pickup",  bikes: 10, order: 1 },
       { station_id: "A32006", station_name: "MIT at Mass Ave",   lat: 42.3581, lon: -71.0936, action: "dropoff", bikes: 7,  order: 2 },
       { station_id: "A32046", station_name: "Broadway T Station",lat: 42.3425, lon: -71.0571, action: "pickup",  bikes: 5,  order: 3 },
       { station_id: "A32049", station_name: "Seaport Blvd",      lat: 42.3513, lon: -71.0490, action: "dropoff", bikes: 5,  order: 4 },
-      { station_id: "A32030", station_name: "Kenmore Square",    lat: 42.3489, lon: -71.0955, action: "dropoff", bikes: 5,  order: 5 },
     ],
   },
   {
-    route_id: "route-gamma",
-    truck_id: "truck-03",
-    total_distance_km: 6.8,
-    estimated_duration_min: 35,
-    bikes_moved: 12,
-    status: "planned",
+    route_id: "route-gamma", truck_id: "truck-03",
+    total_distance_km: 6.8, estimated_duration_min: 35, bikes_moved: 12, status: "planned",
     stops: [
-      { station_id: "A32021", station_name: "Packard's Corner",      lat: 42.3519, lon: -71.1323, action: "pickup",  bikes: 4, order: 1 },
-      { station_id: "A32031", station_name: "Fenway Park",           lat: 42.3465, lon: -71.0979, action: "dropoff", bikes: 4, order: 2 },
-      { station_id: "A32040", station_name: "North End - Hanover St",lat: 42.3634, lon: -71.0548, action: "pickup",  bikes: 4, order: 3 },
-      { station_id: "A32008", station_name: "Central Square",        lat: 42.3651, lon: -71.1032, action: "dropoff", bikes: 4, order: 4 },
+      { station_id: "A32021", station_name: "Packard's Corner",       lat: 42.3519, lon: -71.1323, action: "pickup",  bikes: 4, order: 1 },
+      { station_id: "A32031", station_name: "Fenway Park",            lat: 42.3465, lon: -71.0979, action: "dropoff", bikes: 4, order: 2 },
+      { station_id: "A32040", station_name: "North End - Hanover St", lat: 42.3634, lon: -71.0548, action: "pickup",  bikes: 4, order: 3 },
+      { station_id: "A32008", station_name: "Central Square",         lat: 42.3651, lon: -71.1032, action: "dropoff", bikes: 4, order: 4 },
     ],
   },
 ];
-
-const ROUTE_NAMES: Record<string, string> = {
-  "route-alpha": "Truck Alpha",
-  "route-beta":  "Truck Beta",
-  "route-gamma": "Truck Gamma",
-};
 
 
 /* ------------------------------------------------------------------ */
@@ -110,6 +146,7 @@ function routeStatusBadge(status: string): "running" | "pending" | "success" {
 export default function RebalancingPage() {
   const [stationStatuses, setStationStatuses] = useState<StationStatus[]>([]);
   const [stationLookup, setStationLookup] = useState<Record<string, { name: string; lat: number; lon: number; capacity: number }>>({});
+  const [routes, setRoutes] = useState<RebalancingRoute[]>(FALLBACK_ROUTES);
   const [stationsLive, setStationsLive] = useState(false);
   const [predictionsLive, setPredictionsLive] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -122,15 +159,24 @@ export default function RebalancingPage() {
       const stations = stationsResult.data;
       const predictions = predictionsResult.data;
 
-      // Build A32xxx → GBFS UUID lookup from station mapping
+      // Build A32xxx → GBFS UUID and reverse lookups
       const a32ToGbfs: Record<string, string> = {};
+      const gbfsToA32: Record<string, string> = {};
       for (const row of mapping) {
-        if (row.gbfs_station_id) a32ToGbfs[row.start_station_id] = row.gbfs_station_id;
+        if (row.gbfs_station_id) {
+          a32ToGbfs[row.start_station_id] = row.gbfs_station_id;
+          gbfsToA32[row.gbfs_station_id] = row.start_station_id;
+        }
       }
 
+      // Build lookup keyed by BOTH GBFS UUID and A32xxx so it works regardless of which ID predictions use
       const lookup: Record<string, { name: string; lat: number; lon: number; capacity: number }> = {};
       for (const s of stations) {
-        lookup[s.station_id] = { name: s.station_name, lat: s.lat, lon: s.lon, capacity: s.capacity };
+        const entry = { name: s.station_name, lat: s.lat, lon: s.lon, capacity: s.capacity };
+        lookup[s.station_id] = entry;
+        // Also key by A32xxx if mapping available
+        const a32 = gbfsToA32[s.station_id];
+        if (a32) lookup[a32] = entry;
       }
       setStationLookup(lookup);
 
@@ -141,11 +187,14 @@ export default function RebalancingPage() {
       }));
 
       // Use real predictions to derive risk if both are live, else use mock
-      if (stationsResult.isLive && predictionsResult.isLive) {
-        setStationStatuses(deriveStationStatuses(stations, translatedPredictions));
-      } else {
-        setStationStatuses(mockStationStatuses);
-      }
+      const finalStatuses = (stationsResult.isLive && predictionsResult.isLive)
+        ? deriveStationStatuses(stations, translatedPredictions)
+        : mockStationStatuses;
+      setStationStatuses(finalStatuses);
+
+      // Generate routes from actual station data; fall back to showcase routes
+      const dynamicRoutes = buildRoutes(finalStatuses, lookup);
+      setRoutes(dynamicRoutes.length >= 2 ? dynamicRoutes : FALLBACK_ROUTES);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -160,8 +209,8 @@ export default function RebalancingPage() {
     );
   }
 
-  const activeTrucks = ROUTES.filter((r) => r.status === "active").length;
-  const totalBikesMoved = ROUTES.reduce((sum, r) => sum + r.bikes_moved, 0);
+  const activeTrucks = routes.filter((r) => r.status === "active").length;
+  const totalBikesMoved = routes.reduce((sum, r) => sum + r.bikes_moved, 0);
   const criticalCount = stationStatuses.filter((s) => s.risk_level === "critical").length;
   const avgFillRate = Math.round(stationStatuses.reduce((sum, s) => sum + s.fill_pct, 0) / (stationStatuses.length || 1));
 
@@ -191,7 +240,7 @@ export default function RebalancingPage() {
             <DataBadge isLive={dataIsLive} />
           </div>
           <p className="text-[13px] text-slate-500">
-            {criticalCount} stations need bikes now · {stationStatuses.filter(s => s.risk_level === "surplus").length} stations overfull · {ROUTES.length} routes suggested by model
+            {criticalCount} stations need bikes now · {stationStatuses.filter(s => s.risk_level === "surplus").length} stations overfull · {routes.length} routes suggested by model
           </p>
           {!dataIsLive && (
             <p className="text-[11px] text-amber-400/70 mt-1">
@@ -221,7 +270,7 @@ export default function RebalancingPage() {
         </div>
         <RebalancingMapWrapper
           stations={stationStatuses}
-          routes={ROUTES}
+          routes={routes}
           stationNames={stationLookup}
         />
       </motion.div>
@@ -246,7 +295,7 @@ export default function RebalancingPage() {
           whileInView="visible"
           viewport={{ once: true }}
         >
-          {ROUTES.map((route) => (
+          {routes.map((route) => (
             <motion.div
               key={route.route_id}
               variants={fadeUp}
@@ -254,7 +303,7 @@ export default function RebalancingPage() {
             >
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-[13px] font-semibold text-white">
-                  {ROUTE_NAMES[route.route_id] || route.truck_id}
+                  {TRUCK_NAMES[["route-alpha","route-beta","route-gamma"].indexOf(route.route_id)] ?? route.truck_id}
                 </h4>
                 <StatusBadge
                   status={routeStatusBadge(route.status)}
