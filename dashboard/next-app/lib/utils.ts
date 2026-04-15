@@ -66,30 +66,44 @@ export function deriveStationStatuses(
   predictions: Prediction[],
   limit = 60,
 ): StationStatus[] {
+  // Group predictions by station_id
   const demandByStation: Record<string, number[]> = {};
   for (const p of predictions) {
     if (!demandByStation[p.station_id]) demandByStation[p.station_id] = [];
     demandByStation[p.station_id].push(p.predicted_demand);
   }
 
-  // Compute network-wide avg demand to set thresholds relative to real data
+  // Compute network-wide avg demand per hour per station
   const allDemands = Object.values(demandByStation).flat();
   const networkAvg = allDemands.length > 0
     ? allDemands.reduce((a, b) => a + b, 0) / allDemands.length
     : 1;
-  // Thresholds: top 15% = critical, top 35% = low, bottom 15% = surplus
   const criticalThreshold = networkAvg * 2.0;
   const lowThreshold = networkAvg * 1.3;
   const surplusThreshold = networkAvg * 0.4;
 
-  return stations.slice(0, limit).map((s) => {
-    const demands = demandByStation[s.station_id] ?? [];
-    const avg = demands.length > 0 ? demands.reduce((a, b) => a + b, 0) / demands.length : 0;
-    const peak = demands.length > 0 ? Math.max(...demands) : 0;
+  // Build capacity lookup from stations (keyed by station_id)
+  const capacityById: Record<string, number> = {};
+  for (const s of stations) capacityById[s.station_id] = s.capacity;
 
-    // fill_pct: high demand = low fill (bikes being taken), low demand = high fill
+  // Derive statuses from prediction station IDs (not station list)
+  // This avoids the UUID vs short-ID mismatch between /api/stations and /api/predictions
+  const predictionStationIds = Object.keys(demandByStation)
+    .sort((a, b) => {
+      const avgA = demandByStation[a].reduce((x, y) => x + y, 0) / demandByStation[a].length;
+      const avgB = demandByStation[b].reduce((x, y) => x + y, 0) / demandByStation[b].length;
+      return avgB - avgA; // sort by demand desc so critical stations come first
+    })
+    .slice(0, limit);
+
+  return predictionStationIds.map((sid) => {
+    const demands = demandByStation[sid];
+    const avg = demands.reduce((a, b) => a + b, 0) / demands.length;
+    const peak = Math.max(...demands);
+    const capacity = capacityById[sid] ?? 20; // fallback capacity
+
     const fill_pct = Math.min(95, Math.max(5, Math.round(80 - (avg / (networkAvg || 1)) * 35)));
-    const current_bikes = Math.round((fill_pct / 100) * s.capacity);
+    const current_bikes = Math.round((fill_pct / 100) * capacity);
 
     let risk_level: StationStatus["risk_level"] = "moderate";
     if (avg >= criticalThreshold || peak >= criticalThreshold * 1.5) risk_level = "critical";
@@ -97,9 +111,9 @@ export function deriveStationStatuses(
     else if (avg <= surplusThreshold) risk_level = "surplus";
 
     return {
-      station_id: s.station_id,
+      station_id: sid,
       current_bikes,
-      capacity: s.capacity,
+      capacity,
       fill_pct,
       predicted_demand_1h: parseFloat(avg.toFixed(1)),
       predicted_demand_6h: parseFloat((avg * 6).toFixed(1)),
