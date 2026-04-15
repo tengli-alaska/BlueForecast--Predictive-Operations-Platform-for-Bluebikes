@@ -153,7 +153,8 @@ export default function OverviewPage() {
 
   const tasks = Object.entries(pipeline.tasks);
   const completedTasks = tasks.filter(([, t]) => t.status === "success").length;
-  const dataIsLive = metricsLive && pipelineLive && stationsLive && predictionsLive;
+  // Pipeline status is always mock (no live endpoint). Use metrics + stations + predictions to determine badge.
+  const dataIsLive = metricsLive && stationsLive && predictionsLive;
 
   function riskBadge(level: StationStatus["risk_level"]): "error" | "warning" | "success" | "running" {
     if (level === "critical") return "error";

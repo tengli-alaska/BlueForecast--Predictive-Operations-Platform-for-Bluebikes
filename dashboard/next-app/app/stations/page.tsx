@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import MapWrapper from "@/components/map/MapWrapper";
 import AnimatedCounter from "@/components/shared/AnimatedCounter";
 import DataBadge from "@/components/shared/DataBadge";
-import { getStations, getPredictions } from "@/data";
+import { getStations, getPredictions, getStationMapping } from "@/data";
 import { formatNumber } from "@/lib/utils";
 import type { Station, Prediction } from "@/types";
 
@@ -23,8 +23,18 @@ export default function StationsPage() {
     Promise.all([
       getStations(),
       getPredictions(),
-    ]).then(([stationsResult, predictionsResult]) => {
-      setData({ stations: stationsResult.data, predictions: predictionsResult.data, isLive: stationsResult.isLive && predictionsResult.isLive });
+      getStationMapping(),
+    ]).then(([stationsResult, predictionsResult, mapping]) => {
+      // Translate A32xxx prediction IDs → GBFS UUIDs so the map can join them to stations
+      const a32ToGbfs: Record<string, string> = {};
+      for (const row of mapping) {
+        if (row.gbfs_station_id) a32ToGbfs[row.start_station_id] = row.gbfs_station_id;
+      }
+      const translatedPredictions = predictionsResult.data.map((p) => ({
+        ...p,
+        station_id: a32ToGbfs[p.station_id] ?? p.station_id,
+      }));
+      setData({ stations: stationsResult.data, predictions: translatedPredictions, isLive: stationsResult.isLive && predictionsResult.isLive });
     }).finally(() => setLoading(false));
   }, []);
 
