@@ -41,7 +41,7 @@ case "${ACTION}" in
       --allow-unauthenticated \
       --memory=512Mi \
       --cpu=1 \
-      --min-instances=0 \
+      --min-instances=1 \
       --max-instances=3 \
       --port=8000 \
       --set-env-vars="GCS_BUCKET=bluebikes-demand-predictor-data,GOOGLE_CLOUD_PROJECT=${PROJECT_ID}" \
@@ -60,7 +60,7 @@ case "${ACTION}" in
       --allow-unauthenticated \
       --memory=512Mi \
       --cpu=1 \
-      --min-instances=0 \
+      --min-instances=1 \
       --max-instances=3 \
       --set-env-vars="API_BASE_URL=${API_URL}" \
       --quiet
