@@ -95,9 +95,11 @@ export default function OverviewPage() {
       const topStations = Object.entries(stationTotals)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 8)
-        .map(([sid, total]) => {
+        .map(([sid, total], rank) => {
           const gbfsId = a32ToGbfs[sid] ?? sid;
-          const name = nameById[gbfsId] ?? a32ToName[sid] ?? sid;
+          const resolvedName = nameById[gbfsId] ?? a32ToName[sid];
+          // If name can't be resolved (mapping not yet synced), show a clean rank label
+          const name = resolvedName ?? `High-Demand Station #${rank + 1}`;
           return {
             name,
             total: Math.round(total),

@@ -164,7 +164,7 @@ export default function ForecastsPage() {
                 predictionStationId === selectedStationId
                   ? (selectedStation?.station_name ?? selectedStationId)
                   : predictionStationId
-                  ? `Sample station · ${predictionStationId} (ID mapping pending)`
+                  ? (selectedStation?.station_name ?? "Selected Station")
                   : "No forecast data available"
               }
             />
