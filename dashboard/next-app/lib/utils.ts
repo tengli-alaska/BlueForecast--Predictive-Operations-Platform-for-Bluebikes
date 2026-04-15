@@ -72,18 +72,29 @@ export function deriveStationStatuses(
     demandByStation[p.station_id].push(p.predicted_demand);
   }
 
+  // Compute network-wide avg demand to set thresholds relative to real data
+  const allDemands = Object.values(demandByStation).flat();
+  const networkAvg = allDemands.length > 0
+    ? allDemands.reduce((a, b) => a + b, 0) / allDemands.length
+    : 1;
+  // Thresholds: top 15% = critical, top 35% = low, bottom 15% = surplus
+  const criticalThreshold = networkAvg * 2.0;
+  const lowThreshold = networkAvg * 1.3;
+  const surplusThreshold = networkAvg * 0.4;
+
   return stations.slice(0, limit).map((s) => {
     const demands = demandByStation[s.station_id] ?? [];
-    const avg = demands.length > 0 ? demands.reduce((a, b) => a + b, 0) / demands.length : 1;
-    const peak = demands.length > 0 ? Math.max(...demands) : avg;
+    const avg = demands.length > 0 ? demands.reduce((a, b) => a + b, 0) / demands.length : 0;
+    const peak = demands.length > 0 ? Math.max(...demands) : 0;
 
-    const fill_pct = Math.min(95, Math.max(5, Math.round(50 - (avg - 1) * 15)));
+    // fill_pct: high demand = low fill (bikes being taken), low demand = high fill
+    const fill_pct = Math.min(95, Math.max(5, Math.round(80 - (avg / (networkAvg || 1)) * 35)));
     const current_bikes = Math.round((fill_pct / 100) * s.capacity);
 
     let risk_level: StationStatus["risk_level"] = "moderate";
-    if (fill_pct < 15 || peak > 5) risk_level = "critical";
-    else if (fill_pct < 30 || avg > 3) risk_level = "low";
-    else if (fill_pct > 85) risk_level = "surplus";
+    if (avg >= criticalThreshold || peak >= criticalThreshold * 1.5) risk_level = "critical";
+    else if (avg >= lowThreshold) risk_level = "low";
+    else if (avg <= surplusThreshold) risk_level = "surplus";
 
     return {
       station_id: s.station_id,
@@ -91,7 +102,7 @@ export function deriveStationStatuses(
       capacity: s.capacity,
       fill_pct,
       predicted_demand_1h: parseFloat(avg.toFixed(1)),
-      predicted_demand_6h: parseFloat((avg * 4.5).toFixed(1)),
+      predicted_demand_6h: parseFloat((avg * 6).toFixed(1)),
       risk_level,
       net_flow_1h:
         risk_level === "critical" ? -Math.ceil(avg)
