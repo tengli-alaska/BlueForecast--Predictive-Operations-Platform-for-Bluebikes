@@ -45,7 +45,10 @@ export async function getPredictions(stationId?: string, mode: "full" | "summary
     : `/api/predictions?mode=${mode}`;
   const raw = await fetchJson(url, null);
   if (Array.isArray(raw) && raw.length > 0) return { data: raw, isLive: true };
-  const mock = stationId ? mockPredictions.filter(p => p.station_id === stationId) : mockPredictions;
+  // If stationId doesn't match any mock (e.g. live GBFS UUID when API is down),
+  // fall back to the first mock station's predictions so the chart is never empty.
+  const filtered = stationId ? mockPredictions.filter(p => p.station_id === stationId) : mockPredictions;
+  const mock = filtered.length > 0 ? filtered : mockPredictions.filter(p => p.station_id === mockPredictions[0]?.station_id);
   return { data: mock, isLive: false };
 }
 
