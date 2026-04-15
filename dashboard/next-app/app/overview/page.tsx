@@ -144,7 +144,7 @@ export default function OverviewPage() {
 
   // Time-aware greeting
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
 
   return (
     <div className="p-5 md:p-7 space-y-5">
