@@ -79,39 +79,10 @@ export default function DriftPage() {
         </p>
       </div>
 
-      {/* Scenario Toggle */}
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-text-secondary font-medium">Scenario:</span>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setScenario("stable")}
-            className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium border transition-all duration-200 ${
-              scenario === "stable"
-                ? "bg-accent-blue/20 text-accent-blue border-accent-blue/40 shadow-[0_0_15px_rgba(59,130,246,0.15)]"
-                : "bg-bg-secondary text-text-secondary border-white/[0.06] hover:bg-bg-tertiary"
-            }`}
-          >
-            <ShieldCheck className="h-4 w-4" />
-            Stable
-          </button>
-          <button
-            onClick={() => setScenario("alert")}
-            className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium border transition-all duration-200 ${
-              scenario === "alert"
-                ? "bg-accent-blue/20 text-accent-blue border-accent-blue/40 shadow-[0_0_15px_rgba(59,130,246,0.15)]"
-                : "bg-bg-secondary text-text-secondary border-white/[0.06] hover:bg-bg-tertiary"
-            }`}
-          >
-            <ShieldAlert className="h-4 w-4" />
-            Alert
-          </button>
-        </div>
-      </div>
-
       {/* Status Banner */}
       <AnimatePresence mode="wait">
         <motion.div
-          key={scenario}
+          key="status"
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.97 }}
@@ -169,7 +140,7 @@ export default function DriftPage() {
         </p>
         <AnimatePresence mode="wait">
           <motion.div
-            key={`cards-${scenario}`}
+            key="cards"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
@@ -406,7 +377,7 @@ export default function DriftPage() {
         <ScrollReveal>
           <AnimatePresence mode="wait">
             <motion.div
-              key={`heatmap-${scenario}`}
+              key="heatmap"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
@@ -429,7 +400,7 @@ export default function DriftPage() {
         <ScrollReveal>
           <AnimatePresence mode="wait">
             <motion.div
-              key={`rec-${scenario}`}
+              key="rec"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
