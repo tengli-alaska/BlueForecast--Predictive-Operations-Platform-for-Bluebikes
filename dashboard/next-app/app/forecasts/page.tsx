@@ -43,35 +43,25 @@ export default function ForecastsPage() {
     }).finally(() => setLoading(false));
   }, []);
 
-  // Load all predictions once (filter client-side using the mapping)
+  // Load predictions for selected station only (avoids 2MB full payload)
   useEffect(() => {
-    getPredictions(undefined, "full").then(({ data, isLive }) => { setAllPredictions(data); setIsLive(isLive); });
-  }, []);
+    if (!selectedStationId) return;
+    const tripId = stationMapping[selectedStationId];
+    const idToFetch = tripId || selectedStationId;
+    getPredictions(idToFetch).then(({ data, isLive }) => {
+      setAllPredictions(data);
+      setIsLive(isLive);
+    });
+  }, [selectedStationId, stationMapping]);
 
   const selectedStation = useMemo(
     () => stations.find((s) => s.station_id === selectedStationId),
     [stations, selectedStationId]
   );
 
-  // Filter predictions for the selected station.
-  // Try direct match first, then mapping, then first unique station in dataset as fallback.
-  const { predictions, predictionStationId } = useMemo(() => {
-    // 1. Direct match (works if prediction station_id === gbfs station_id)
-    const direct = allPredictions.filter((p) => p.station_id === selectedStationId);
-    if (direct.length > 0) return { predictions: direct, predictionStationId: selectedStationId };
-
-    // 2. Mapping match (A32xxx style IDs from trip history)
-    const tripId = stationMapping[selectedStationId];
-    if (tripId) {
-      const mapped = allPredictions.filter((p) => p.station_id === tripId);
-      if (mapped.length > 0) return { predictions: mapped, predictionStationId: tripId };
-    }
-
-    // 3. Fallback: show the first station in the predictions dataset (honest sample)
-    const firstId = allPredictions[0]?.station_id;
-    const sample = firstId ? allPredictions.filter((p) => p.station_id === firstId).slice(0, 24) : [];
-    return { predictions: sample, predictionStationId: firstId ?? "" };
-  }, [allPredictions, selectedStationId, stationMapping]);
+  // Predictions are fetched directly for the selected station — use as-is
+  const predictions = allPredictions;
+  const predictionStationId = predictions[0]?.station_id ?? "";
 
   const peakDemand = useMemo(
     () =>

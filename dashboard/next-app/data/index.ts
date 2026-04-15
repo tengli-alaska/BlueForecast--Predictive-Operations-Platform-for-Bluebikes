@@ -22,10 +22,13 @@ import { mockPipelineStatus } from "./mock/pipeline-status";
 import { mockStationStatuses, mockRebalancingRoutes, mockDemandHeatmap } from "./mock/rebalancing";
 import { mockCostAnalysis } from "./mock/cost-analysis";
 
-// Call API directly (bypasses Next.js proxy which is unreliable on Cloud Run).
-// NEXT_PUBLIC_API_URL is the FastAPI backend URL, set at build time.
-// Falls back to /api/... proxy for local development.
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+// Call FastAPI backend directly — bypasses the Next.js proxy which is
+// unreliable between Cloud Run services. API has CORS configured for
+// the dashboard origin. Empty string = use /api/... proxy (local dev).
+const API_BASE =
+  typeof window !== "undefined"
+    ? "https://blueforecast-api-969016657851.us-east1.run.app"
+    : "";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchJson<T>(path: string, fallback: T): Promise<any> {
