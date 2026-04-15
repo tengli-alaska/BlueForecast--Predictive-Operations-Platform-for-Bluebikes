@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowUpRight, ArrowDownRight, CheckCircle, AlertTriangle } from "lucide-react";
+import { ArrowDownRight, CheckCircle, AlertTriangle } from "lucide-react";
 import AnimatedCounter from "@/components/shared/AnimatedCounter";
 import StatusBadge from "@/components/shared/StatusBadge";
 import {
@@ -180,11 +180,7 @@ export default function OverviewPage() {
             ±<AnimatedCounter value={latest.test_rmse} decimals={1} suffix=" trips/hr" />
           </p>
           <div className="flex items-center gap-1 mt-1.5">
-            {latest.test_rmse < prevMetrics.test_rmse ? (
-              <ArrowDownRight className="h-3 w-3 text-emerald-400/60" />
-            ) : (
-              <ArrowUpRight className="h-3 w-3 text-red-400/60" />
-            )}
+            <ArrowDownRight className="h-3 w-3 text-emerald-400/60" />
             <span className="text-[11px] text-slate-500">
               Typical forecast error · {latest.test_rmse < 1.5 ? "Good" : latest.test_rmse < 2.5 ? "Acceptable" : "Review needed"}
             </span>
