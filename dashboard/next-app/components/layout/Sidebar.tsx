@@ -45,20 +45,20 @@ export default function Sidebar() {
   const accentColor = role === "ops" ? "blue" : "violet";
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-56 flex-col bg-[#080c14] border-r border-white/[0.04]">
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-56 flex-col bg-bg-secondary border-r border-[var(--border)] transition-colors duration-200">
       {/* Logo */}
       <div className="px-4 py-4">
         <div className="flex items-center gap-2">
           <div className={`h-6 w-6 rounded-md ${role === "ops" ? "bg-blue-500/20" : "bg-violet-500/20"} flex items-center justify-center`}>
             <div className={`h-2 w-2 rounded-full ${role === "ops" ? "bg-blue-400" : "bg-violet-400"}`} />
           </div>
-          <span className="text-[14px] font-semibold text-white/90 tracking-tight">BlueForecast</span>
+          <span className="text-[14px] font-semibold text-text-primary tracking-tight">BlueForecast</span>
         </div>
       </div>
 
       {/* Role Toggle */}
       <div className="px-2 pb-2">
-        <div className="flex rounded-md bg-white/[0.03] p-0.5 border border-white/[0.04]">
+        <div className="flex rounded-md bg-bg-tertiary p-0.5 border border-[var(--border)]">
           <button
             onClick={() => setRole("ops")}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded py-1.5 text-[11px] font-medium transition-all ${
@@ -101,15 +101,14 @@ export default function Sidebar() {
           return (
             <Link key={item.href} href={item.href}>
               <motion.div
-                whileHover={{ backgroundColor: "rgba(255,255,255,0.03)" }}
                 className={`relative flex items-center gap-2 rounded-md px-2.5 py-[7px] text-[13px] transition-colors ${
-                  isActive ? "text-white" : "text-slate-500 hover:text-slate-300"
+                  isActive ? "text-text-primary" : "text-text-secondary hover:text-text-primary"
                 }`}
               >
                 {isActive && (
                   <motion.div
                     layoutId="sidebar-active"
-                    className="absolute inset-0 rounded-md bg-white/[0.05]"
+                    className="absolute inset-0 rounded-md bg-bg-tertiary"
                     transition={{ type: "spring", stiffness: 500, damping: 35 }}
                   />
                 )}
@@ -122,10 +121,10 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-white/[0.04]">
+      <div className="px-4 py-3 border-t border-[var(--border)]">
         <div className="flex items-center gap-1.5">
-          <span className="h-[5px] w-[5px] rounded-full bg-emerald-400/80" />
-          <span className="text-[11px] text-slate-600">All systems normal</span>
+          <span className="h-[5px] w-[5px] rounded-full bg-accent-green" />
+          <span className="text-[11px] text-text-secondary">All systems normal</span>
         </div>
       </div>
     </aside>

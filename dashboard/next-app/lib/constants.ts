@@ -7,6 +7,7 @@ export const COLORS = {
   purple: "#a855f7",
   cyan: "#06b6d4",
   pink: "#ec4899",
+  // These are kept for fallback only — use getChartColors() in components
   bgPrimary: "#0a0e17",
   bgSecondary: "#111827",
   bgTertiary: "#1f2937",
@@ -25,6 +26,32 @@ export const CHART_COLORS = [
   "#f97316",
   "#ec4899",
 ];
+
+/** Returns theme-aware chart colors by reading CSS variables at runtime */
+export function getChartColors(theme: "light" | "dark") {
+  if (theme === "light") {
+    return {
+      bgPrimary: "#f4f7fb",
+      bgSecondary: "#e4eaf3",
+      bgTertiary: "#d6dfee",
+      textPrimary: "#0d1b2e",
+      textSecondary: "#3d5170",
+      border: "#c8d4e8",
+      tooltipBg: "#f4f7fb",
+      tooltipBorder: "#c8d4e8",
+    };
+  }
+  return {
+    bgPrimary: "#0a0e17",
+    bgSecondary: "#111827",
+    bgTertiary: "#1f2937",
+    textPrimary: "#f1f5f9",
+    textSecondary: "#94a3b8",
+    border: "#1e293b",
+    tooltipBg: "#0f1520",
+    tooltipBorder: "rgba(255,255,255,0.06)",
+  };
+}
 
 export const BOSTON_CENTER = { lat: 42.3601, lng: -71.0589 };
 

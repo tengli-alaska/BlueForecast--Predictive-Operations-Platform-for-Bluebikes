@@ -22,7 +22,7 @@ export default function ChartContainer({
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
       viewport={{ once: true }}
-      className={`rounded-2xl border border-white/[0.06] bg-[#0f1623] p-5 ${className}`}
+      className={`rounded-2xl border border-[var(--border)] bg-bg-card p-5 transition-colors duration-200 ${className}`}
     >
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-text-primary">{title}</h3>

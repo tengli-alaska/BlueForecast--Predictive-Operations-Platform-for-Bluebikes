@@ -124,7 +124,7 @@ export default function ForecastsPage() {
           id="station-select"
           value={selectedStationId}
           onChange={(e) => setSelectedStationId(e.target.value)}
-          className="w-full sm:w-96 rounded-xl backdrop-blur-xl bg-white/[0.05] border border-white/[0.1] px-4 py-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 appearance-none cursor-pointer transition-all duration-200 hover:bg-white/[0.07]"
+          className="w-full sm:w-96 rounded-xl backdrop-blur-xl bg-bg-tertiary border border-white/[0.1] px-4 py-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue/50 appearance-none cursor-pointer transition-all duration-200 hover:bg-white/[0.07]"
         >
           {stations.map((s) => (
             <option key={s.station_id} value={s.station_id} className="bg-bg-primary text-text-primary">
@@ -158,7 +158,7 @@ export default function ForecastsPage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3 }}
-            className="relative overflow-hidden rounded-xl backdrop-blur-xl bg-white/[0.03] border border-white/[0.06] p-6 space-y-5 h-fit shadow-2xl shadow-black/20"
+            className="relative overflow-hidden rounded-xl backdrop-blur-xl bg-bg-secondary border border-white/[0.06] p-6 space-y-5 h-fit shadow-2xl shadow-black/20"
           >
             <div
               className="pointer-events-none absolute inset-x-0 top-0 h-px"
@@ -171,7 +171,7 @@ export default function ForecastsPage() {
             </p>
 
             <div className="space-y-3">
-              <div className="flex items-start gap-3 bg-white/[0.03] rounded-lg p-3">
+              <div className="flex items-start gap-3 bg-bg-secondary rounded-lg p-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/20 shadow-md shadow-blue-500/20 shrink-0">
                   <MapPin className="h-4 w-4 text-accent-blue" />
                 </div>
@@ -181,7 +181,7 @@ export default function ForecastsPage() {
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 bg-white/[0.03] rounded-lg p-3">
+              <div className="flex items-start gap-3 bg-bg-secondary rounded-lg p-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500/20 shadow-md shadow-green-500/20 shrink-0">
                   <BarChart3 className="h-4 w-4 text-accent-green" />
                 </div>
@@ -191,7 +191,7 @@ export default function ForecastsPage() {
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 bg-white/[0.03] rounded-lg p-3">
+              <div className="flex items-start gap-3 bg-bg-secondary rounded-lg p-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-500/20 shadow-md shadow-purple-500/20 shrink-0">
                   <Crosshair className="h-4 w-4 text-accent-purple" />
                 </div>
@@ -205,19 +205,19 @@ export default function ForecastsPage() {
             </div>
 
             <div className="border-t border-white/[0.06] pt-4 space-y-3">
-              <div className="flex justify-between items-center bg-white/[0.03] rounded-lg px-3 py-2">
+              <div className="flex justify-between items-center bg-bg-secondary rounded-lg px-3 py-2">
                 <span className="text-xs text-text-secondary">Peak Demand</span>
                 <span className="text-sm font-semibold text-text-primary">
                   {formatNumber(peakDemand, 1)} trips/hr
                 </span>
               </div>
-              <div className="flex justify-between items-center bg-white/[0.03] rounded-lg px-3 py-2">
+              <div className="flex justify-between items-center bg-bg-secondary rounded-lg px-3 py-2">
                 <span className="text-xs text-text-secondary">Avg Demand</span>
                 <span className="text-sm font-semibold text-text-primary">
                   {formatNumber(avgDemand, 1)} trips/hr
                 </span>
               </div>
-              <div className="flex justify-between items-center bg-white/[0.03] rounded-lg px-3 py-2">
+              <div className="flex justify-between items-center bg-bg-secondary rounded-lg px-3 py-2">
                 <span className="text-xs text-text-secondary">Recommended Stock</span>
                 <span className="text-sm font-semibold text-text-primary">
                   {Math.ceil(peakDemand * 1.5)} bikes at peak
@@ -247,7 +247,7 @@ export default function ForecastsPage() {
       {/* Hourly Predictions Table */}
       <ScrollReveal>
         <div
-          className="relative overflow-hidden rounded-2xl backdrop-blur-xl bg-white/[0.03] border border-white/[0.06] p-6 shadow-2xl shadow-black/20"
+          className="relative overflow-hidden rounded-2xl backdrop-blur-xl bg-bg-secondary border border-white/[0.06] p-6 shadow-2xl shadow-black/20"
         >
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-px"
@@ -259,7 +259,7 @@ export default function ForecastsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-white/[0.04]">
+                <tr className="bg-bg-secondary">
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-text-secondary uppercase tracking-wider rounded-tl-lg sticky top-0">
                     Hour
                   </th>
@@ -277,7 +277,7 @@ export default function ForecastsPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-[var(--border)]">
                 {predictions.map((p, i) => (
                   <motion.tr
                     key={`${selectedStationId}-${i}`}
@@ -285,7 +285,7 @@ export default function ForecastsPage() {
                     variants={tableRowVariants}
                     initial="hidden"
                     animate="visible"
-                    className="group hover:bg-white/[0.04] transition-colors relative"
+                    className="group hover:bg-bg-secondary transition-colors relative"
                   >
                     <td className="px-4 py-3 text-text-primary font-medium relative">
                       <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent-blue/0 group-hover:bg-accent-blue transition-colors rounded-full" />

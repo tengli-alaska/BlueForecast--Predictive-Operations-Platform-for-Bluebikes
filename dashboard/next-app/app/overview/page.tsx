@@ -127,7 +127,7 @@ export default function OverviewPage() {
         {/* ---- Row 1: Ops-friendly KPIs ---- */}
         <motion.div
           custom={0} variants={fade} initial="hidden" animate="visible"
-          className="col-span-6 rounded-xl bg-[#0f1520] p-4"
+          className="col-span-6 rounded-xl bg-bg-card p-4"
         >
           <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Stations Need Action</p>
           <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
@@ -144,14 +144,14 @@ export default function OverviewPage() {
 
         <motion.div
           custom={1} variants={fade} initial="hidden" animate="visible"
-          className="col-span-6 rounded-xl bg-[#0f1520] p-4"
+          className="col-span-6 rounded-xl bg-bg-card p-4"
         >
           <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Avg Fill Rate</p>
           <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
             <AnimatedCounter value={avgFill} decimals={0} suffix="%" />
           </p>
           {/* Mini fill bar */}
-          <div className="mt-2.5 h-1 w-full rounded-full bg-white/[0.06]">
+          <div className="mt-2.5 h-1 w-full rounded-full bg-bg-tertiary">
             <motion.div
               className="h-full rounded-full bg-blue-400/60"
               initial={{ width: 0 }}
@@ -164,14 +164,14 @@ export default function OverviewPage() {
         {/* ---- Row 2: Model chart (wide) + Pipeline (narrow) ---- */}
         <motion.div
           custom={4} variants={fade} initial="hidden" animate="visible"
-          className="col-span-8 rounded-xl bg-[#0f1520]"
+          className="col-span-8 rounded-xl bg-bg-card"
         >
           <MetricLineChart data={chartData} title="Model Performance" />
         </motion.div>
 
         <motion.div
           custom={5} variants={fade} initial="hidden" animate="visible"
-          className="col-span-4 rounded-xl bg-[#0f1520] p-4"
+          className="col-span-4 rounded-xl bg-bg-card p-4"
         >
           <p className="text-[13px] font-medium text-white mb-3">Pipeline</p>
           <div className="space-y-2.5">
@@ -186,9 +186,9 @@ export default function OverviewPage() {
               </div>
             ))}
           </div>
-          <div className="mt-4 pt-3 border-t border-white/[0.04]">
+          <div className="mt-4 pt-3 border-t border-[var(--border)]">
             <p className="text-[11px] text-slate-500">{completedTasks}/{tasks.length} tasks complete</p>
-            <div className="mt-1.5 h-1 w-full rounded-full bg-white/[0.06]">
+            <div className="mt-1.5 h-1 w-full rounded-full bg-bg-tertiary">
               <div
                 className="h-full rounded-full bg-emerald-400/50"
                 style={{ width: `${(completedTasks / tasks.length) * 100}%` }}
@@ -208,7 +208,7 @@ export default function OverviewPage() {
         {/* ---- Row 4: Status tiles — compact ---- */}
         <motion.div
           custom={7} variants={fade} initial="hidden" animate="visible"
-          className="col-span-4 rounded-xl bg-[#0f1520] p-4"
+          className="col-span-4 rounded-xl bg-bg-card p-4"
         >
           <div className="flex items-center justify-between">
             <p className="text-[12px] text-slate-400">Validation</p>
@@ -223,7 +223,7 @@ export default function OverviewPage() {
 
         <motion.div
           custom={8} variants={fade} initial="hidden" animate="visible"
-          className="col-span-4 rounded-xl bg-[#0f1520] p-4"
+          className="col-span-4 rounded-xl bg-bg-card p-4"
         >
           <div className="flex items-center justify-between">
             <p className="text-[12px] text-slate-400">Drift</p>
@@ -238,7 +238,7 @@ export default function OverviewPage() {
 
         <motion.div
           custom={9} variants={fade} initial="hidden" animate="visible"
-          className="col-span-4 rounded-xl bg-[#0f1520] p-4"
+          className="col-span-4 rounded-xl bg-bg-card p-4"
         >
           <div className="flex items-center justify-between">
             <p className="text-[12px] text-slate-400">Bias</p>

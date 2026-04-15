@@ -262,7 +262,7 @@ export default function RebalancingPage() {
                   .map((stop) => (
                     <div
                       key={stop.order}
-                      className="flex items-center gap-2 rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2 hover:bg-white/[0.04] transition-colors"
+                      className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-white/[0.02] px-3 py-2 hover:bg-bg-secondary transition-colors"
                     >
                       <span className="text-[10px] font-mono text-slate-600 w-4 text-right shrink-0">
                         {stop.order}
@@ -308,7 +308,7 @@ export default function RebalancingPage() {
           <DataBadge isLive={dataIsLive} liveLabel="LIVE PREDICTIONS" mockLabel="DEMO DATA" />
         </div>
 
-        <div className="grid grid-cols-[1fr_140px_80px_80px_80px_60px] gap-2 px-3 pb-2 text-[10px] font-medium text-slate-500 uppercase tracking-wider border-b border-white/[0.04]">
+        <div className="grid grid-cols-[1fr_140px_80px_80px_80px_60px] gap-2 px-3 pb-2 text-[10px] font-medium text-slate-500 uppercase tracking-wider border-b border-[var(--border)]">
           <span>Station</span>
           <span>Fill Level</span>
           <span className="text-right">Bikes</span>
@@ -329,7 +329,7 @@ export default function RebalancingPage() {
               >
                 <span className="text-[12px] text-slate-300 truncate" title={name}>{name}</span>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 h-[5px] rounded-full bg-white/[0.06] overflow-hidden">
+                  <div className="flex-1 h-[5px] rounded-full bg-bg-tertiary overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all"
                       style={{ width: `${Math.min(100, s.fill_pct)}%`, backgroundColor: fillBarColor(s.fill_pct) }}

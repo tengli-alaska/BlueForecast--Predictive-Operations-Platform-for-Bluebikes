@@ -152,7 +152,7 @@ export default function FeaturesPage() {
                 <motion.div
                   key={cat}
                   variants={itemVariants}
-                  className="backdrop-blur-xl bg-white/[0.05] rounded-2xl p-5 border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+                  className="backdrop-blur-xl bg-bg-tertiary rounded-2xl p-5 border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
                   style={{ borderLeftWidth: 3, borderLeftStyle: "solid", borderLeftColor: meta.color }}
                 >
                   {/* Card Header */}
@@ -179,7 +179,7 @@ export default function FeaturesPage() {
                   <div className="space-y-0">
                     {catFeatures.map((f, idx) => (
                       <div key={f.feature}>
-                        <div className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-white/[0.06] transition-colors">
+                        <div className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-bg-tertiary transition-colors">
                           <span className="text-xs text-text-secondary truncate mr-2">
                             {f.feature}
                           </span>

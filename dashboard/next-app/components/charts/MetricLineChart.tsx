@@ -11,7 +11,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import ChartContainer from "@/components/shared/ChartContainer";
-import { COLORS } from "@/lib/constants";
+import { COLORS, getChartColors } from "@/lib/constants";
+import { useTheme } from "@/components/ThemeProvider";
 
 interface MetricLineChartProps {
   data: { label: string; rmse: number; r2: number; mae: number }[];
@@ -42,6 +43,8 @@ function CustomTooltip({
 }
 
 export default function MetricLineChart({ data, title }: MetricLineChartProps) {
+  const { theme } = useTheme();
+  const C = getChartColors(theme);
   return (
     <ChartContainer title={title}>
       <ResponsiveContainer width="100%" height={350}>
@@ -49,21 +52,21 @@ export default function MetricLineChart({ data, title }: MetricLineChartProps) {
           data={data}
           margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
+          <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
           <XAxis
             dataKey="label"
-            tick={{ fill: COLORS.textSecondary, fontSize: 12 }}
-            axisLine={{ stroke: COLORS.border }}
-            tickLine={{ stroke: COLORS.border }}
+            tick={{ fill: C.textSecondary, fontSize: 12 }}
+            axisLine={{ stroke: C.border }}
+            tickLine={{ stroke: C.border }}
           />
           <YAxis
-            tick={{ fill: COLORS.textSecondary, fontSize: 12 }}
-            axisLine={{ stroke: COLORS.border }}
-            tickLine={{ stroke: COLORS.border }}
+            tick={{ fill: C.textSecondary, fontSize: 12 }}
+            axisLine={{ stroke: C.border }}
+            tickLine={{ stroke: C.border }}
           />
           <Tooltip content={<CustomTooltip />} />
           <Legend
-            wrapperStyle={{ color: COLORS.textSecondary, fontSize: 12 }}
+            wrapperStyle={{ color: C.textSecondary, fontSize: 12 }}
           />
           <Line
             type="monotone"

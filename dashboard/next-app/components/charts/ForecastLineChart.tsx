@@ -10,7 +10,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import ChartContainer from "@/components/shared/ChartContainer";
-import { COLORS } from "@/lib/constants";
+import { COLORS, getChartColors } from "@/lib/constants";
+import { useTheme } from "@/components/ThemeProvider";
 import { formatHour } from "@/lib/utils";
 import type { Prediction } from "@/types";
 
@@ -40,51 +41,35 @@ function CustomTooltip({
   );
 }
 
-export default function ForecastLineChart({
-  data,
-  stationName,
-}: ForecastLineChartProps) {
-  const chartData = data.map((d) => ({
-    ...d,
-    hour: formatHour(d.forecast_hour),
-  }));
+export default function ForecastLineChart({ data, stationName }: ForecastLineChartProps) {
+  const { theme } = useTheme();
+  const C = getChartColors(theme);
 
-  const title = stationName
-    ? `Demand Forecast - ${stationName}`
-    : "Demand Forecast";
+  const chartData = data.map((d) => ({ ...d, hour: formatHour(d.forecast_hour) }));
+  const title = stationName ? `Demand Forecast - ${stationName}` : "Demand Forecast";
 
   return (
     <ChartContainer title={title}>
       <ResponsiveContainer width="100%" height={350}>
-        <AreaChart
-          data={chartData}
-          margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
-        >
+        <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
           <defs>
             <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={COLORS.blue} stopOpacity={0.4} />
               <stop offset="95%" stopColor={COLORS.blue} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
+          <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
           <XAxis
             dataKey="hour"
-            tick={{ fill: COLORS.textSecondary, fontSize: 12 }}
-            axisLine={{ stroke: COLORS.border }}
-            tickLine={{ stroke: COLORS.border }}
+            tick={{ fill: C.textSecondary, fontSize: 12 }}
+            axisLine={{ stroke: C.border }}
+            tickLine={{ stroke: C.border }}
           />
           <YAxis
-            tick={{ fill: COLORS.textSecondary, fontSize: 12 }}
-            axisLine={{ stroke: COLORS.border }}
-            tickLine={{ stroke: COLORS.border }}
-            label={{
-              value: "Predicted Demand",
-              angle: -90,
-              position: "insideLeft",
-              offset: 0,
-              fill: COLORS.textSecondary,
-              fontSize: 12,
-            }}
+            tick={{ fill: C.textSecondary, fontSize: 12 }}
+            axisLine={{ stroke: C.border }}
+            tickLine={{ stroke: C.border }}
+            label={{ value: "Predicted Demand", angle: -90, position: "insideLeft", offset: 0, fill: C.textSecondary, fontSize: 12 }}
           />
           <Tooltip content={<CustomTooltip />} />
           <Area
@@ -93,19 +78,9 @@ export default function ForecastLineChart({
             stroke={COLORS.blue}
             strokeWidth={2.5}
             fill="url(#forecastGradient)"
-            dot={{
-              r: 4,
-              fill: COLORS.blue,
-              stroke: COLORS.bgSecondary,
-              strokeWidth: 2,
-            }}
-            activeDot={{
-              r: 6,
-              fill: COLORS.blue,
-              stroke: COLORS.textPrimary,
-              strokeWidth: 2,
-            }}
-            isAnimationActive={true}
+            dot={{ r: 4, fill: COLORS.blue, stroke: C.bgSecondary, strokeWidth: 2 }}
+            activeDot={{ r: 6, fill: COLORS.blue, stroke: C.textPrimary, strokeWidth: 2 }}
+            isAnimationActive
             animationDuration={1000}
           />
         </AreaChart>

@@ -2,6 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Sun, Moon } from "lucide-react";
+import { useTheme } from "@/components/ThemeProvider";
 
 const pageTitles: Record<string, string> = {
   "/overview": "Overview",
@@ -13,12 +15,14 @@ const pageTitles: Record<string, string> = {
   "/bias": "Bias & Fairness",
   "/drift": "Drift Detection",
   "/pipeline": "Pipeline Status",
+  "/costs": "Cost Analysis",
 };
 
 export default function TopBar() {
   const pathname = usePathname();
   const title = pageTitles[pathname] ?? "BlueForecast";
   const [isLive, setIsLive] = useState<boolean | null>(null);
+  const { theme, toggle } = useTheme();
 
   useEffect(() => {
     fetch("/api/health", { cache: "no-store" })
@@ -28,28 +32,39 @@ export default function TopBar() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-white/[0.05] bg-[#0a0e17]/90 backdrop-blur-md px-6">
-      <h2 className="text-sm font-medium text-slate-300">{title}</h2>
-      <div className="flex items-center gap-2">
+    <header className="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-[var(--border)] bg-bg-primary/90 backdrop-blur-md px-6 transition-colors duration-200">
+      <h2 className="text-sm font-medium text-text-primary">{title}</h2>
+      <div className="flex items-center gap-3">
+        {/* Live / Demo badge */}
         {isLive === null ? (
-          // Still checking
           <>
-            <span className="h-1.5 w-1.5 rounded-full bg-slate-500 animate-pulse" />
-            <span className="text-xs text-slate-500">Checking...</span>
+            <span className="h-1.5 w-1.5 rounded-full bg-text-secondary animate-pulse" />
+            <span className="text-xs text-text-secondary">Checking...</span>
           </>
         ) : isLive ? (
-          // Live GCS data
           <>
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs text-emerald-400/80">Live data</span>
+            <span className="h-1.5 w-1.5 rounded-full bg-accent-green animate-pulse" />
+            <span className="text-xs text-accent-green">Live data</span>
           </>
         ) : (
-          // API unavailable — demo mode
           <>
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-            <span className="text-xs text-amber-400/80">Demo data</span>
+            <span className="h-1.5 w-1.5 rounded-full bg-accent-yellow" />
+            <span className="text-xs text-accent-yellow">Demo data</span>
           </>
         )}
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggle}
+          aria-label="Toggle theme"
+          className="flex items-center justify-center h-7 w-7 rounded-md border border-[var(--border)] bg-bg-secondary hover:bg-bg-tertiary transition-colors duration-150"
+        >
+          {theme === "dark" ? (
+            <Sun className="h-3.5 w-3.5 text-text-secondary" />
+          ) : (
+            <Moon className="h-3.5 w-3.5 text-text-secondary" />
+          )}
+        </button>
       </div>
     </header>
   );

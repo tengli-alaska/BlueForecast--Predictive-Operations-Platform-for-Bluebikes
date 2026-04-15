@@ -691,7 +691,7 @@ const stats = [
   { icon: MapPin, label: "Stations", value: "600+", color: "#3b82f6", glow: "59,130,246" },
   { icon: Activity, label: "Predictions/hr", value: "14K+", color: "#22c55e", glow: "34,197,94" },
   { icon: BarChart3, label: "Uptime", value: "99.9%", color: "#a855f7", glow: "168,85,247" },
-  { icon: Zap, label: "Data Refresh", value: "Hourly", color: "#06b6d4", glow: "6,182,212" },
+  { icon: Zap, label: "Data Refresh", value: "6 Hours", color: "#06b6d4", glow: "6,182,212" },
 ];
 
 function StatCard({
@@ -1017,10 +1017,10 @@ export default function HeroSplash({ onEnter }: { onEnter: () => void }) {
         </div>
 
         {/* Subtitle - word stagger */}
-        <div className="h-8 sm:h-10 mb-2">
-          <p className="text-lg sm:text-xl text-text-secondary">
+        <div className="h-8 sm:h-10 mb-4">
+          <p className="text-lg sm:text-xl font-medium tracking-wide text-text-secondary/80 uppercase letter-spacing-widest">
             <StaggerWords
-              text="Predictive Operations Platform for the Bluebikes Ops Team"
+              text="Predictive Operations Platform · Bluebikes"
               visible={phase >= 3}
               staggerDelay={0.07}
               startDelay={0}
@@ -1029,12 +1029,12 @@ export default function HeroSplash({ onEnter }: { onEnter: () => void }) {
         </div>
 
         {/* Tagline */}
-        <div className="h-12 mb-2">
-          <p className="text-sm text-text-secondary/60">
+        <div className="h-auto mb-4">
+          <p className="text-[15px] sm:text-[17px] font-normal tracking-wide text-slate-400 leading-relaxed">
             <StaggerWords
-              text="Built for operations staff and admins for real-time demand forecasting and faster refill."
+              text="Real-Time Demand Forecasting & Fleet Rebalancing — Built for Ops Teams and Admins."
               visible={phase >= 3}
-              staggerDelay={0.03}
+              staggerDelay={0.025}
               startDelay={0.5}
             />
           </p>
@@ -1055,17 +1055,32 @@ export default function HeroSplash({ onEnter }: { onEnter: () => void }) {
         {/* CTA Button */}
         <CTAButton visible={phase >= 5} onClick={handleEnter} />
 
-        {/* Powered by line */}
+        {/* Powered by + License */}
         <AnimatePresence>
           {phase >= 5 && (
-            <motion.p
-              className="mt-5 text-xs text-text-secondary/40 tracking-wider uppercase"
+            <motion.div
+              className="mt-5 flex flex-col items-center gap-2"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6, duration: 0.5 }}
             >
-              Powered by XGBoost + MLflow + Apache Airflow
-            </motion.p>
+              <p className="text-[11px] text-text-secondary/35 tracking-widest uppercase font-medium">
+                Powered by XGBoost · MLflow · Apache Airflow
+              </p>
+              <div className="mt-1 h-px w-24 bg-white/[0.06] mx-auto" />
+              <p className="text-[13px] text-text-secondary/50 text-center max-w-md leading-relaxed">
+                Trip data used under the{" "}
+                <a
+                  href="https://www.bluebikes.com/data-license-agreement"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400/70 underline underline-offset-2 hover:text-blue-400 transition-colors"
+                >
+                  Bluebikes Data License Agreement
+                </a>
+                . Data provided by Bluebikes for non-commercial research and analysis.
+              </p>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>

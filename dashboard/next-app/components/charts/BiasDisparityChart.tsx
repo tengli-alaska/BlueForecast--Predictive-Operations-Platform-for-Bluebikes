@@ -13,7 +13,8 @@ import {
   LabelList,
 } from "recharts";
 import ChartContainer from "@/components/shared/ChartContainer";
-import { COLORS, THRESHOLDS } from "@/lib/constants";
+import { COLORS, THRESHOLDS, getChartColors } from "@/lib/constants";
+import { useTheme } from "@/components/ThemeProvider";
 import type { BiasSlice } from "@/types";
 
 interface BiasDisparityChartProps {
@@ -55,6 +56,8 @@ function CustomTooltip({
 }
 
 export default function BiasDisparityChart({ data }: BiasDisparityChartProps) {
+  const { theme } = useTheme();
+  const C = getChartColors(theme);
   const chartData = data.map((slice) => ({
     name: slice.slice_name,
     disparity_ratio: slice.disparity_ratio,
@@ -70,20 +73,20 @@ export default function BiasDisparityChart({ data }: BiasDisparityChartProps) {
           data={chartData}
           margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
+          <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
           <XAxis
             dataKey="name"
-            tick={{ fill: COLORS.textSecondary, fontSize: 12 }}
-            axisLine={{ stroke: COLORS.border }}
-            tickLine={{ stroke: COLORS.border }}
+            tick={{ fill: C.textSecondary, fontSize: 12 }}
+            axisLine={{ stroke: C.border }}
+            tickLine={{ stroke: C.border }}
             angle={-20}
             textAnchor="end"
             height={60}
           />
           <YAxis
-            tick={{ fill: COLORS.textSecondary, fontSize: 12 }}
-            axisLine={{ stroke: COLORS.border }}
-            tickLine={{ stroke: COLORS.border }}
+            tick={{ fill: C.textSecondary, fontSize: 12 }}
+            axisLine={{ stroke: C.border }}
+            tickLine={{ stroke: C.border }}
           />
           <Tooltip content={<CustomTooltip />} />
           <ReferenceLine
@@ -120,7 +123,7 @@ export default function BiasDisparityChart({ data }: BiasDisparityChartProps) {
               formatter={(value: string | number | boolean | null | undefined) =>
                 typeof value === "number" ? value.toFixed(2) : String(value ?? "")
               }
-              fill={COLORS.textSecondary}
+              fill={C.textSecondary}
               fontSize={11}
             />
           </Bar>
