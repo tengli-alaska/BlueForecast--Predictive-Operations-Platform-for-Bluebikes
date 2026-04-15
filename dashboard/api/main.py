@@ -115,7 +115,7 @@ async def get_stations():
 @app.get("/api/predictions")
 async def get_predictions(
     station_id: Optional[str] = Query(None),
-    mode: str = Query("full", pattern="^(full|summary)$"),
+    mode: str = Query("full", pattern="^(full|summary|network)$"),
 ):
     """Return demand predictions.
 
