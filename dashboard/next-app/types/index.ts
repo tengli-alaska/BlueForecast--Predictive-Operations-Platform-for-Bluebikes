@@ -151,3 +151,24 @@ export interface DemandHeatmapEntry {
   day: string;
   demand: number;
 }
+
+export interface InfraService {
+  name: string;
+  id: string;
+  region: string;
+  memory: string | null;
+  cpu: string | null;
+  min_instances: number | null;
+  max_instances: number | null;
+  note: string;
+}
+
+export interface TrainingDuration {
+  mode: string;
+  duration: string;
+}
+
+export interface CostAnalysis {
+  services: InfraService[];
+  training_durations: TrainingDuration[];
+}

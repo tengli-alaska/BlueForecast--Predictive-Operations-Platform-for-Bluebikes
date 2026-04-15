@@ -16,6 +16,7 @@ import {
   GitBranch,
   Users,
   ShieldCheck,
+  DollarSign,
 } from "lucide-react";
 
 const opsNav = [
@@ -31,6 +32,7 @@ const adminNav = [
   { label: "Bias", href: "/bias", icon: Scale },
   { label: "Drift", href: "/drift", icon: Activity },
   { label: "Pipeline", href: "/pipeline", icon: GitBranch },
+  { label: "Cost Analysis", href: "/costs", icon: DollarSign },
 ];
 
 type Role = "ops" | "admin";

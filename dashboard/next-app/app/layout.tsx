@@ -19,6 +19,11 @@ export const metadata: Metadata = {
     "Predictive operations platform for Bluebikes bike-share demand forecasting, model monitoring, bias detection, and pipeline management.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

@@ -190,10 +190,12 @@ body {
   0% { --angle: 0deg; }
   100% { --angle: 360deg; }
 }
-@property --angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
+@supports (background: paint(something)) {
+  @property --angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+  }
 }
 
 /* ===== Premium Typography ===== */

@@ -690,8 +690,8 @@ function ScrollingTicker() {
 const stats = [
   { icon: MapPin, label: "Stations", value: "600+", color: "#3b82f6", glow: "59,130,246" },
   { icon: Activity, label: "Predictions/hr", value: "14K+", color: "#22c55e", glow: "34,197,94" },
-  { icon: BarChart3, label: "R\u00B2 Accuracy", value: "70.2%", color: "#a855f7", glow: "168,85,247" },
-  { icon: Zap, label: "Features", value: "32", color: "#06b6d4", glow: "6,182,212" },
+  { icon: BarChart3, label: "Uptime", value: "99.9%", color: "#a855f7", glow: "168,85,247" },
+  { icon: Zap, label: "Data Refresh", value: "Hourly", color: "#06b6d4", glow: "6,182,212" },
 ];
 
 function StatCard({
@@ -888,14 +888,14 @@ function CTAButton({
             />
 
             <span className="relative z-10 tracking-wide">
-              Enter Command Center
+              Command Center
             </span>
             <motion.span
               className="relative z-10"
               animate={{ x: hovered ? 4 : 0 }}
               transition={{ type: "spring", stiffness: 400, damping: 20 }}
             >
-              <ArrowRight className="h-5 w-5" />
+              <ArrowRight className="h-6 w-6" />
             </motion.span>
           </motion.button>
         </motion.div>
@@ -1020,7 +1020,7 @@ export default function HeroSplash({ onEnter }: { onEnter: () => void }) {
         <div className="h-8 sm:h-10 mb-2">
           <p className="text-lg sm:text-xl text-text-secondary">
             <StaggerWords
-              text="AI-Powered Predictive Operations for Bluebikes"
+              text="Predictive Operations Platform for the Bluebikes Ops Team"
               visible={phase >= 3}
               staggerDelay={0.07}
               startDelay={0}
@@ -1029,12 +1029,12 @@ export default function HeroSplash({ onEnter }: { onEnter: () => void }) {
         </div>
 
         {/* Tagline */}
-        <div className="h-6 mb-2">
+        <div className="h-12 mb-2">
           <p className="text-sm text-text-secondary/60">
             <StaggerWords
-              text="Real-time demand forecasting across 600+ stations in Boston"
+              text="Built for operations staff and admins for real-time demand forecasting and faster refill."
               visible={phase >= 3}
-              staggerDelay={0.04}
+              staggerDelay={0.03}
               startDelay={0.5}
             />
           </p>
