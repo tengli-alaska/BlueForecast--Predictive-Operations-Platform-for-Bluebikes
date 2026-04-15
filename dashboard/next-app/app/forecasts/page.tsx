@@ -7,6 +7,7 @@ import ForecastLineChart from "@/components/charts/ForecastLineChart";
 import ScrollReveal from "@/components/shared/ScrollReveal";
 import TextReveal from "@/components/shared/TextReveal";
 import { getStations, getPredictions, getStationMapping } from "@/data";
+import DataBadge from "@/components/shared/DataBadge";
 import { formatHour, formatNumber, getDemandColor } from "@/lib/utils";
 import type { Station, Prediction } from "@/types";
 
@@ -26,6 +27,7 @@ export default function ForecastsPage() {
   const [allPredictions, setAllPredictions] = useState<Prediction[]>([]);
   // Maps GBFS station_id → A32xxx start_station_id used in predictions
   const [stationMapping, setStationMapping] = useState<Record<string, string>>({});
+  const [isLive, setIsLive] = useState(false);
 
   // Load stations and station ID mapping on mount
   useEffect(() => {
@@ -43,7 +45,7 @@ export default function ForecastsPage() {
 
   // Load all predictions once (filter client-side using the mapping)
   useEffect(() => {
-    getPredictions().then(({ data }) => setAllPredictions(data));
+    getPredictions().then(({ data, isLive }) => { setAllPredictions(data); setIsLive(isLive); });
   }, []);
 
   const selectedStation = useMemo(
@@ -51,17 +53,24 @@ export default function ForecastsPage() {
     [stations, selectedStationId]
   );
 
-  // Filter predictions for the selected station using the ID mapping when available
-  const predictions = useMemo(() => {
+  // Filter predictions for the selected station.
+  // Try direct match first, then mapping, then first unique station in dataset as fallback.
+  const { predictions, predictionStationId } = useMemo(() => {
+    // 1. Direct match (works if prediction station_id === gbfs station_id)
+    const direct = allPredictions.filter((p) => p.station_id === selectedStationId);
+    if (direct.length > 0) return { predictions: direct, predictionStationId: selectedStationId };
+
+    // 2. Mapping match (A32xxx style IDs from trip history)
     const tripId = stationMapping[selectedStationId];
     if (tripId) {
-      // We have a mapping — filter to this station's A32xxx ID
-      const filtered = allPredictions.filter((p) => (p as any).station_id === tripId);
-      // Fall back to all predictions if the mapped ID yields nothing (pipeline not re-run yet)
-      return filtered.length > 0 ? filtered : allPredictions;
+      const mapped = allPredictions.filter((p) => p.station_id === tripId);
+      if (mapped.length > 0) return { predictions: mapped, predictionStationId: tripId };
     }
-    // No mapping available yet (pipeline hasn't run) — show all predictions
-    return allPredictions;
+
+    // 3. Fallback: show the first station in the predictions dataset (honest sample)
+    const firstId = allPredictions[0]?.station_id;
+    const sample = firstId ? allPredictions.filter((p) => p.station_id === firstId).slice(0, 24) : [];
+    return { predictions: sample, predictionStationId: firstId ?? "" };
   }, [allPredictions, selectedStationId, stationMapping]);
 
   const peakDemand = useMemo(
@@ -96,9 +105,12 @@ export default function ForecastsPage() {
     <div className="min-h-screen bg-bg-primary bg-grid p-6 md:p-8 space-y-8">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl heading-premium font-bold text-text-primary">
-          <TextReveal text="Demand Forecasts" />
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl heading-premium font-bold text-text-primary">
+            <TextReveal text="Demand Forecasts" />
+          </h1>
+          <DataBadge isLive={isLive} liveLabel="LIVE PREDICTIONS" mockLabel="SAMPLE DATA" />
+        </div>
         <p className="mt-2 text-sm text-text-secondary">
           <TextReveal
             text="24-hour demand predictions by station. Select a station to view its forecast."
@@ -148,7 +160,13 @@ export default function ForecastsPage() {
           <div className="lg:col-span-2">
             <ForecastLineChart
               data={predictions}
-              stationName="Network-wide demand forecast"
+              stationName={
+                predictionStationId === selectedStationId
+                  ? (selectedStation?.station_name ?? selectedStationId)
+                  : predictionStationId
+                  ? `Sample station · ${predictionStationId} (ID mapping pending)`
+                  : "No forecast data available"
+              }
             />
           </div>
 

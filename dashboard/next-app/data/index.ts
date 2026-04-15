@@ -75,8 +75,31 @@ export async function getLatestMetrics(): Promise<{ data: ModelMetrics; isLive: 
   return { data: mockModelMetrics[mockModelMetrics.length - 1], isLive: false };
 }
 
-export async function getFeatureImportance(): Promise<FeatureImportance[]> {
-  return mockFeatureImportance;
+export async function getFeatureImportance(): Promise<{ data: FeatureImportance[]; isLive: boolean }> {
+  const raw = await fetchJson("/api/feature-importance", null);
+  if (raw && raw.shap_mean_abs && raw.xgboost_gain) {
+    const CATEGORY_MAP: Record<string, FeatureImportance["category"]> = {
+      demand_lag_1h: "lag", demand_lag_24h: "lag", demand_lag_168h: "lag",
+      rolling_avg_3h: "rolling", rolling_avg_6h: "rolling", rolling_avg_24h: "rolling",
+      temperature_c: "weather", precipitation_mm: "weather", wind_speed_kmh: "weather",
+      humidity_pct: "weather", feels_like_c: "weather", weather_code: "weather",
+      is_cold: "weather", is_hot: "weather", is_precipitation: "weather",
+      hour_of_day: "time", day_of_week: "time", month: "time", year: "time",
+      is_weekend: "time", is_holiday: "time", hour_sin: "time", hour_cos: "time",
+      dow_sin: "time", dow_cos: "time", month_sin: "time", month_cos: "time",
+      start_station_id: "station", capacity: "station",
+    };
+    const features: FeatureImportance[] = Object.entries(raw.shap_mean_abs as Record<string, number>)
+      .map(([feature, shap_value]) => ({
+        feature,
+        shap_value,
+        xgboost_gain: (raw.xgboost_gain as Record<string, number>)[feature] ?? 0,
+        category: CATEGORY_MAP[feature] ?? "time",
+      }))
+      .sort((a, b) => b.shap_value - a.shap_value);
+    return { data: features, isLive: true };
+  }
+  return { data: mockFeatureImportance, isLive: false };
 }
 
 /**

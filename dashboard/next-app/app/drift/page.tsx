@@ -1,10 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ShieldCheck,
-  ShieldAlert,
   Activity,
   BarChart3,
   Target,
@@ -13,6 +11,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { getDriftReport } from "@/data";
+import DataBadge from "@/components/shared/DataBadge";
 import DriftHeatmap from "@/components/charts/DriftHeatmap";
 import StatusBadge from "@/components/shared/StatusBadge";
 import ScrollReveal from "@/components/shared/ScrollReveal";
@@ -34,20 +33,16 @@ const cardVariants = {
 };
 
 export default function DriftPage() {
-  const [scenario, setScenario] = useState<"stable" | "alert">("stable");
   const [report, setReport] = useState<DriftReport | null>(null);
+  const [isLive, setIsLive] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const loadReport = useCallback((s: "stable" | "alert") => {
-    setLoading(true);
-    getDriftReport(s).then((r) => {
+  useEffect(() => {
+    getDriftReport().then((r) => {
       setReport(r);
+      setIsLive(Object.keys(r.feature_drift?.drift_scores ?? {}).length > 0);
     }).finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    loadReport(scenario);
-  }, [scenario, loadReport]);
 
   if (loading || !report) {
     return (
@@ -73,10 +68,14 @@ export default function DriftPage() {
           <h1 className="text-3xl font-bold text-text-primary heading-premium">
             <TextReveal text="Drift Monitoring" />
           </h1>
+          <DataBadge isLive={isLive} liveLabel="LIVE KL-DIV" />
         </div>
         <p className="text-text-secondary max-w-3xl leading-relaxed">
-          Continuous monitoring of feature distributions, model performance, and target
-          statistics using KL divergence to detect when retraining is needed.
+          KL divergence analysis of feature distributions at training time. Flags when
+          retraining may be needed — reviewed by an engineer before any action is taken.
+        </p>
+        <p className="text-[11px] text-slate-500 mt-2">
+          Report generated at last model promotion · Calendar features (month, year) flagged but excluded from retrain decision — performance MAE improved 30%
         </p>
       </div>
 

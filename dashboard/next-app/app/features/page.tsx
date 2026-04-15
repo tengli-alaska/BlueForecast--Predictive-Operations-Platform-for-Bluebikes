@@ -7,6 +7,7 @@ import { getFeatureImportance } from "@/data";
 import FeatureImportanceChart from "@/components/charts/FeatureImportanceChart";
 import ScrollReveal from "@/components/shared/ScrollReveal";
 import TextReveal from "@/components/shared/TextReveal";
+import DataBadge from "@/components/shared/DataBadge";
 import { COLORS } from "@/lib/constants";
 import type { FeatureImportance } from "@/types";
 
@@ -61,11 +62,13 @@ const itemVariants = {
 
 export default function FeaturesPage() {
   const [features, setFeatures] = useState<FeatureImportance[]>([]);
+  const [isLive, setIsLive] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getFeatureImportance().then((f) => {
-      setFeatures(f);
+    getFeatureImportance().then((result) => {
+      setFeatures(result.data);
+      setIsLive(result.isLive);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -103,6 +106,7 @@ export default function FeaturesPage() {
           <h1 className="text-3xl font-bold text-text-primary heading-premium">
             <TextReveal text="Feature Importance" />
           </h1>
+          <DataBadge isLive={isLive} liveLabel="LIVE SHAP" mockLabel="SAMPLE DATA" />
         </div>
         <p className="text-text-secondary max-w-3xl leading-relaxed">
           SHAP (SHapley Additive exPlanations) values quantify each feature's marginal

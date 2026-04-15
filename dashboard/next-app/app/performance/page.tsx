@@ -10,6 +10,7 @@ import ResidualHistogram from "@/components/charts/ResidualHistogram";
 import ScrollReveal from "@/components/shared/ScrollReveal";
 import TextReveal from "@/components/shared/TextReveal";
 import { getModelMetrics, getLatestMetrics } from "@/data";
+import DataBadge from "@/components/shared/DataBadge";
 import { formatNumber } from "@/lib/utils";
 import { COLORS } from "@/lib/constants";
 import type { ModelMetrics } from "@/types";
@@ -45,12 +46,15 @@ export default function PerformancePage() {
   const [data, setData] = useState<PerformanceData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [metricsLive, setMetricsLive] = useState(false);
+
   useEffect(() => {
     Promise.all([
       getModelMetrics(),
       getLatestMetrics(),
     ]).then(([allMetrics, latestResult]) => {
       setData({ allMetrics, latest: latestResult.data });
+      setMetricsLive(latestResult.isLive);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -187,9 +191,12 @@ export default function PerformancePage() {
     <div className="min-h-screen bg-bg-primary bg-grid p-6 md:p-8 space-y-8">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl heading-premium font-bold text-text-primary">
-          <TextReveal text="Model Performance" />
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl heading-premium font-bold text-text-primary">
+            <TextReveal text="Model Performance" />
+          </h1>
+          <DataBadge isLive={metricsLive} liveLabel="LIVE METRICS" mockLabel="DEMO METRICS" />
+        </div>
         <p className="mt-2 text-sm text-text-secondary">
           <TextReveal
             text="Evaluation metrics, diagnostic plots, and validation gate results for the latest model run."

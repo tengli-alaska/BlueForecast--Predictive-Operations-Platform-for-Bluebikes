@@ -28,18 +28,16 @@ WRITTEN TO:
 
 import io
 import logging
+import tempfile
 from datetime import datetime, timezone
 
 import holidays
-import mlflow
-import mlflow.xgboost
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 from google.cloud import storage
-from mlflow.tracking import MlflowClient
 
 from model_pipeline.data_loader import FEATURE_COLS, load_feature_matrix
-from model_pipeline.trainer import _setup_mlflow
 
 logger = logging.getLogger("model_pipeline.predictor")
 logger.setLevel(logging.INFO)
@@ -54,25 +52,42 @@ HISTORY_LOOKBACK = 200  # rows of history kept per station for lag computation
 # Champion model loader
 # ---------------------------------------------------------------------------
 
+CHAMPION_MODEL_GCS = "processed/models/champion/model.ubj"
+APPROVED_METADATA_GCS = "processed/models/approved/metadata.json"
+
 def load_champion_model() -> tuple:
     """
-    Load the current champion model from the MLflow Model Registry.
+    Load champion model directly from GCS (no MLflow server required).
+    Reads approved/metadata.json for version info, downloads model.ubj.
 
     Returns
     -------
-    model       : XGBoost model (loaded via mlflow.xgboost.load_model)
-    version_num : int  — registry version number
-    run_id      : str  — MLflow run ID (for metadata logging)
+    model       : XGBoost Booster
+    version_num : int
+    run_id      : str
     """
-    client  = MlflowClient()
-    champion    = client.get_model_version_by_alias(REGISTRY_NAME, "champion")
-    version_num = int(champion.version)
-    run_id      = champion.run_id
+    import json
+    gcs_client = storage.Client()
+    bucket = gcs_client.bucket(BUCKET)
 
-    model = mlflow.xgboost.load_model(f"runs:/{run_id}/model")
+    # Read version metadata
+    meta_blob = bucket.blob(APPROVED_METADATA_GCS)
+    metadata = json.loads(meta_blob.download_as_text())
+    version_num = int(metadata.get("registry_version", 0))
+    run_id = metadata.get("run_id", "unknown")
+
+    # Download model.ubj to a temp file and load
+    model_blob = bucket.blob(CHAMPION_MODEL_GCS)
+    with tempfile.NamedTemporaryFile(suffix=".ubj", delete=False) as f:
+        model_blob.download_to_file(f)
+        tmp_path = f.name
+
+    model = xgb.XGBRegressor()
+    model.load_model(tmp_path)
+
     logger.info(
-        "Champion model loaded: %s v%s (run %s)",
-        REGISTRY_NAME, version_num, run_id[:8],
+        "Champion model loaded from GCS: v%s (run %s)",
+        version_num, run_id[:8],
     )
     return model, version_num, run_id
 
@@ -165,8 +180,10 @@ def generate_24h_forecasts(
         model_version (int) | generated_at (str ISO-8601)
     """
     df             = feature_matrix.sort_values("hour")
-    last_ts        = df["hour"].max()
-    forecast_start = last_ts + pd.Timedelta(hours=1)
+    # Anchor forecasts to now, not the end of the training data.
+    # Lag features are still drawn from historical data — weather uses persistence.
+    now            = pd.Timestamp.now(tz="UTC").replace(minute=0, second=0, microsecond=0).tz_localize(None)
+    forecast_start = now + pd.Timedelta(hours=1)
     stations       = sorted(df["start_station_id"].unique())
 
     logger.info(
@@ -291,10 +308,9 @@ def write_predictions_to_gcs(predictions_df: pd.DataFrame) -> dict[str, str]:
 def run_prediction_pipeline() -> pd.DataFrame:
     """
     End-to-end prediction pipeline.
-    Loads champion model, generates forecasts, writes to GCS, logs to MLflow.
+    Loads champion model from GCS, generates forecasts, writes to GCS.
+    No MLflow server required.
     """
-    _setup_mlflow()
-
     model, version_num, run_id = load_champion_model()
     df, _                      = load_feature_matrix()
 
@@ -305,11 +321,7 @@ def run_prediction_pipeline() -> pd.DataFrame:
         model_version=version_num,
     )
 
-    uris = write_predictions_to_gcs(predictions_df)
-
-    client = MlflowClient()
-    client.set_tag(run_id, "predictions_latest_gcs", uris["latest"])
-    client.set_tag(run_id, "predictions_dated_gcs",  uris["dated"])
-    logger.info("Prediction URIs logged to MLflow run %s", run_id[:8])
+    write_predictions_to_gcs(predictions_df)
+    logger.info("Prediction pipeline complete. Run: %s", run_id[:8])
 
     return predictions_df
