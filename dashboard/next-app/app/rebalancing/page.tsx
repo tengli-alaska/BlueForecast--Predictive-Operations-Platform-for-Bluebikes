@@ -7,7 +7,7 @@ import AnimatedCounter from "@/components/shared/AnimatedCounter";
 import StatusBadge from "@/components/shared/StatusBadge";
 import DataBadge from "@/components/shared/DataBadge";
 import RebalancingMapWrapper from "@/components/map/RebalancingMapWrapper";
-import { getStations, getPredictions } from "@/data";
+import { getStations, getPredictions, getStationMapping } from "@/data";
 import { deriveStationStatuses } from "@/lib/utils";
 import { mockStationStatuses, mockRebalancingRoutes } from "@/data/mock/rebalancing";
 import type { Station, Prediction, StationStatus, RebalancingRoute } from "@/types";
@@ -115,12 +115,18 @@ export default function RebalancingPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([getStations(), getPredictions()]).then(([stationsResult, predictionsResult]) => {
+    Promise.all([getStations(), getPredictions(), getStationMapping()]).then(([stationsResult, predictionsResult, mapping]) => {
       setStationsLive(stationsResult.isLive);
       setPredictionsLive(predictionsResult.isLive);
 
       const stations = stationsResult.data;
       const predictions = predictionsResult.data;
+
+      // Build A32xxx → GBFS UUID lookup from station mapping
+      const a32ToGbfs: Record<string, string> = {};
+      for (const row of mapping) {
+        if (row.gbfs_station_id) a32ToGbfs[row.start_station_id] = row.gbfs_station_id;
+      }
 
       const lookup: Record<string, { name: string; lat: number; lon: number; capacity: number }> = {};
       for (const s of stations) {
@@ -128,9 +134,15 @@ export default function RebalancingPage() {
       }
       setStationLookup(lookup);
 
+      // Translate prediction IDs to GBFS UUIDs so deriveStationStatuses works
+      const translatedPredictions: Prediction[] = predictions.map((p) => ({
+        ...p,
+        station_id: a32ToGbfs[p.station_id] ?? p.station_id,
+      }));
+
       // Use real predictions to derive risk if both are live, else use mock
       if (stationsResult.isLive && predictionsResult.isLive) {
-        setStationStatuses(deriveStationStatuses(stations, predictions));
+        setStationStatuses(deriveStationStatuses(stations, translatedPredictions));
       } else {
         setStationStatuses(mockStationStatuses);
       }
