@@ -66,32 +66,62 @@ export function deriveStationStatuses(
   predictions: Prediction[],
   limit = 60,
 ): StationStatus[] {
+  // Group predictions by station_id
   const demandByStation: Record<string, number[]> = {};
   for (const p of predictions) {
     if (!demandByStation[p.station_id]) demandByStation[p.station_id] = [];
     demandByStation[p.station_id].push(p.predicted_demand);
   }
 
-  return stations.slice(0, limit).map((s) => {
-    const demands = demandByStation[s.station_id] ?? [];
-    const avg = demands.length > 0 ? demands.reduce((a, b) => a + b, 0) / demands.length : 1;
-    const peak = demands.length > 0 ? Math.max(...demands) : avg;
+  // Compute network-wide avg demand per hour per station
+  const allDemands = Object.values(demandByStation).flat();
+  const networkAvg = allDemands.length > 0
+    ? allDemands.reduce((a, b) => a + b, 0) / allDemands.length
+    : 1;
+  // Percentile thresholds computed below from sorted station avgs
+  const criticalThreshold = networkAvg * 2.0; // fallback only
+  const lowThreshold = networkAvg * 1.3;
+  const surplusThreshold = networkAvg * 0.4;
 
-    const fill_pct = Math.min(95, Math.max(5, Math.round(50 - (avg - 1) * 15)));
-    const current_bikes = Math.round((fill_pct / 100) * s.capacity);
+  // Build capacity lookup from stations (keyed by station_id)
+  const capacityById: Record<string, number> = {};
+  for (const s of stations) capacityById[s.station_id] = s.capacity;
 
+  // Compute per-station averages to determine percentile thresholds
+  const stationAvgs = Object.entries(demandByStation).map(([sid, demands]) => ({
+    sid,
+    avg: demands.reduce((a, b) => a + b, 0) / demands.length,
+  }));
+  const sortedAvgs = [...stationAvgs].sort((a, b) => a.avg - b.avg);
+  const p85 = sortedAvgs[Math.floor(sortedAvgs.length * 0.85)]?.avg ?? criticalThreshold;
+  const p65 = sortedAvgs[Math.floor(sortedAvgs.length * 0.65)]?.avg ?? lowThreshold;
+  const p15 = sortedAvgs[Math.floor(sortedAvgs.length * 0.15)]?.avg ?? surplusThreshold;
+
+  // Take all prediction station IDs (not pre-sorted by demand)
+  const predictionStationIds = Object.keys(demandByStation).slice(0, limit);
+
+  return predictionStationIds.map((sid) => {
+    const demands = demandByStation[sid];
+    const avg = demands.reduce((a, b) => a + b, 0) / demands.length;
+    const peak = Math.max(...demands);
+    const capacity = capacityById[sid] ?? 20; // fallback capacity
+
+    const fill_pct = Math.min(95, Math.max(5, Math.round(80 - (avg / (networkAvg || 1)) * 35)));
+    const current_bikes = Math.round((fill_pct / 100) * capacity);
+
+    // Use percentile thresholds: top 15% = critical, 65th-85th = low, bottom 15% = surplus
     let risk_level: StationStatus["risk_level"] = "moderate";
-    if (fill_pct < 15 || peak > 5) risk_level = "critical";
-    else if (fill_pct < 30 || avg > 3) risk_level = "low";
-    else if (fill_pct > 85) risk_level = "surplus";
+    if (avg >= p85) risk_level = "critical";
+    else if (avg >= p65) risk_level = "low";
+    else if (avg <= p15) risk_level = "surplus";
 
     return {
-      station_id: s.station_id,
+      station_id: sid,
       current_bikes,
-      capacity: s.capacity,
+      capacity,
       fill_pct,
       predicted_demand_1h: parseFloat(avg.toFixed(1)),
-      predicted_demand_6h: parseFloat((avg * 4.5).toFixed(1)),
+      predicted_demand_6h: parseFloat((avg * 6).toFixed(1)),
       risk_level,
       net_flow_1h:
         risk_level === "critical" ? -Math.ceil(avg)
