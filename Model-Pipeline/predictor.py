@@ -165,8 +165,10 @@ def generate_24h_forecasts(
         model_version (int) | generated_at (str ISO-8601)
     """
     df             = feature_matrix.sort_values("hour")
-    last_ts        = df["hour"].max()
-    forecast_start = last_ts + pd.Timedelta(hours=1)
+    # Anchor forecasts to now, not the end of the training data.
+    # Lag features are still drawn from historical data — weather uses persistence.
+    now            = pd.Timestamp.now(tz="UTC").replace(minute=0, second=0, microsecond=0).tz_localize(None)
+    forecast_start = now + pd.Timedelta(hours=1)
     stations       = sorted(df["start_station_id"].unique())
 
     logger.info(
