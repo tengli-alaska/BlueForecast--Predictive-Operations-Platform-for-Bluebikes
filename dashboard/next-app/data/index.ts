@@ -39,8 +39,10 @@ export async function getStations(): Promise<{ data: Station[]; isLive: boolean 
   return { data: mockStations, isLive: false };
 }
 
-export async function getPredictions(stationId?: string): Promise<{ data: Prediction[]; isLive: boolean }> {
-  const url = stationId ? `/api/predictions?station_id=${stationId}` : "/api/predictions";
+export async function getPredictions(stationId?: string, mode: "full" | "summary" = "summary"): Promise<{ data: Prediction[]; isLive: boolean }> {
+  const url = stationId
+    ? `/api/predictions?station_id=${stationId}`
+    : `/api/predictions?mode=${mode}`;
   const raw = await fetchJson(url, null);
   if (Array.isArray(raw) && raw.length > 0) return { data: raw, isLive: true };
   const mock = stationId ? mockPredictions.filter(p => p.station_id === stationId) : mockPredictions;

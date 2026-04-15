@@ -113,8 +113,17 @@ async def get_stations():
 
 
 @app.get("/api/predictions")
-async def get_predictions(station_id: Optional[str] = Query(None)):
-    """Return demand predictions, optionally filtered by station_id."""
+async def get_predictions(
+    station_id: Optional[str] = Query(None),
+    mode: str = Query("full", pattern="^(full|summary)$"),
+):
+    """Return demand predictions.
+
+    - station_id: filter to one station, returns all 24 hourly rows
+    - mode=full (default): all 24h rows for ALL stations — use only when needed
+    - mode=summary: one row per station (peak hour + avg demand) — ~30KB vs 2MB
+      Used by Overview and Rebalancing for network-wide views.
+    """
     df = gcs.read_parquet("processed/predictions/latest/predictions.parquet", ttl=300)
     if df is None:
         return JSONResponse(
@@ -123,6 +132,24 @@ async def get_predictions(station_id: Optional[str] = Query(None)):
         )
     if station_id:
         df = df[df["station_id"] == station_id]
+        return df_to_records(df)
+
+    if mode == "summary":
+        # Aggregate to one row per station: peak demand hour + avg + total
+        agg = (
+            df.groupby("station_id")
+            .agg(
+                predicted_demand=("predicted_demand", "mean"),
+                peak_demand=("predicted_demand", "max"),
+                total_demand=("predicted_demand", "sum"),
+                forecast_hour=("forecast_hour", "min"),
+                model_version=("model_version", "first"),
+                generated_at=("generated_at", "first"),
+            )
+            .reset_index()
+        )
+        return df_to_records(agg)
+
     return df_to_records(df)
 
 

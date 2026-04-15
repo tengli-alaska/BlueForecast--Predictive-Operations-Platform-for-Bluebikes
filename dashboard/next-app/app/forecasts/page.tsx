@@ -45,7 +45,7 @@ export default function ForecastsPage() {
 
   // Load all predictions once (filter client-side using the mapping)
   useEffect(() => {
-    getPredictions().then(({ data, isLive }) => { setAllPredictions(data); setIsLive(isLive); });
+    getPredictions(undefined, "full").then(({ data, isLive }) => { setAllPredictions(data); setIsLive(isLive); });
   }, []);
 
   const selectedStation = useMemo(
