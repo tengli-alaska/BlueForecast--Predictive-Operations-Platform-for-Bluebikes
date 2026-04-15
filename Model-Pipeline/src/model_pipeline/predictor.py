@@ -69,35 +69,25 @@ def load_champion_model() -> tuple:
     import os
     from google.cloud import storage
 
-    client      = MlflowClient()
-    champion    = client.get_model_version_by_alias(REGISTRY_NAME, "champion")
-    version_num = int(champion.version)
-    run_id      = champion.run_id
-
-    # Look up model UUID from run_id by scanning MLmodel files in GCS
+    # Load champion metadata from GCS approved/metadata.json
+    import json
     gcs_client = storage.Client()
     bucket     = gcs_client.bucket(BUCKET)
-    model_path = None
-    for blob in bucket.list_blobs(prefix="mlflow-artifacts/1/models/"):
-        if blob.name.endswith("MLmodel"):
-            content = blob.download_as_text()
-            if f"run_id: {run_id}" in content:
-                model_path = blob.name.replace("MLmodel", "model.ubj")
-                break
+    approved   = json.loads(bucket.blob("processed/models/approved/metadata.json").download_as_text())
+    version_num = int(approved.get("registry_version", 0))
+    run_id      = approved.get("run_id", "unknown")
 
-    if model_path is None:
-        raise RuntimeError(f"Could not find model.ubj for run_id={run_id}")
-
-    logger.info("Loading champion model from GCS: %s", model_path)
+    # Load model from fixed champion path (no MLflow server needed)
+    champion_path = "processed/models/champion/model.ubj"
+    logger.info("Loading champion model from GCS: %s", champion_path)
     with tempfile.NamedTemporaryFile(suffix=".ubj", delete=False) as tmp:
         tmp_path = tmp.name
-    bucket.blob(model_path).download_to_filename(tmp_path)
+    bucket.blob(champion_path).download_to_filename(tmp_path)
     xgb_model = xgb.XGBRegressor()
     xgb_model.load_model(tmp_path)
     os.unlink(tmp_path)
 
-    logger.info("Champion model loaded: %s v%s (run %s)",
-                REGISTRY_NAME, version_num, run_id[:8])
+    logger.info("Champion model loaded: v%s (run %s)", version_num, run_id[:8])
     return xgb_model, version_num, run_id
 
 
@@ -193,8 +183,9 @@ def generate_24h_forecasts(
         model_version (int) | generated_at (str ISO-8601)
     """
     df             = feature_matrix.sort_values("hour")
-    last_ts        = df["hour"].max()
-    forecast_start = last_ts + pd.Timedelta(hours=1)
+    # Anchor to current time so predictions cover the next 24h, not Jan 2025
+    now            = pd.Timestamp.now(tz="UTC").replace(minute=0, second=0, microsecond=0).tz_localize(None)
+    forecast_start = now + pd.Timedelta(hours=1)
 
     # start_station_id is already integer-encoded by load_feature_matrix().
     # Use inverse_transform to recover original string IDs for output only.
@@ -321,9 +312,9 @@ def write_predictions_to_gcs(predictions_df: pd.DataFrame) -> dict[str, str]:
 def run_prediction_pipeline() -> pd.DataFrame:
     """
     End-to-end prediction pipeline.
-    Loads champion model, generates forecasts, writes to GCS, logs to MLflow.
+    Loads champion model from GCS, generates forecasts, writes to GCS.
+    No MLflow server required.
     """
-    _setup_mlflow()
 
     model, version_num, run_id = load_champion_model()
     df, _, _                   = load_feature_matrix()   # (df, version_hash, le) — le reloaded from GCS below

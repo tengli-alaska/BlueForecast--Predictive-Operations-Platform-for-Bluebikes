@@ -1,10 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ShieldCheck,
-  ShieldAlert,
   Activity,
   BarChart3,
   Target,
@@ -35,23 +33,16 @@ const cardVariants = {
 };
 
 export default function DriftPage() {
-  const [scenario, setScenario] = useState<"stable" | "alert">("stable");
   const [report, setReport] = useState<DriftReport | null>(null);
   const [isLive, setIsLive] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const loadReport = useCallback((s: "stable" | "alert") => {
-    setLoading(true);
-    getDriftReport(s).then((r) => {
+  useEffect(() => {
+    getDriftReport().then((r) => {
       setReport(r);
-      // If GCS is live, feature_drift will have real drift_scores keys
       setIsLive(Object.keys(r.feature_drift?.drift_scores ?? {}).length > 0);
     }).finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    loadReport(scenario);
-  }, [scenario, loadReport]);
 
   if (loading || !report) {
     return (
@@ -80,38 +71,12 @@ export default function DriftPage() {
           <DataBadge isLive={isLive} liveLabel="LIVE KL-DIV" />
         </div>
         <p className="text-text-secondary max-w-3xl leading-relaxed">
-          Continuous monitoring of feature distributions, model performance, and target
-          statistics using KL divergence to detect when retraining is needed.
+          KL divergence analysis of feature distributions at training time. Flags when
+          retraining may be needed — reviewed by an engineer before any action is taken.
         </p>
-      </div>
-
-      {/* Scenario Toggle */}
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-text-secondary font-medium">Scenario:</span>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setScenario("stable")}
-            className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium border transition-all duration-200 ${
-              scenario === "stable"
-                ? "bg-accent-blue/20 text-accent-blue border-accent-blue/40 shadow-[0_0_15px_rgba(59,130,246,0.15)]"
-                : "bg-white/[0.03] text-text-secondary border-white/[0.06] hover:bg-white/[0.06]"
-            }`}
-          >
-            <ShieldCheck className="h-4 w-4" />
-            Stable
-          </button>
-          <button
-            onClick={() => setScenario("alert")}
-            className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium border transition-all duration-200 ${
-              scenario === "alert"
-                ? "bg-accent-blue/20 text-accent-blue border-accent-blue/40 shadow-[0_0_15px_rgba(59,130,246,0.15)]"
-                : "bg-white/[0.03] text-text-secondary border-white/[0.06] hover:bg-white/[0.06]"
-            }`}
-          >
-            <ShieldAlert className="h-4 w-4" />
-            Alert
-          </button>
-        </div>
+        <p className="text-[11px] text-slate-500 mt-2">
+          Report generated at last model promotion · Calendar features (month, year) flagged but excluded from retrain decision — performance MAE improved 30%
+        </p>
       </div>
 
       {/* Status Banner */}

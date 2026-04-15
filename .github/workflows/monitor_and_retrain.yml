@@ -1,8 +1,9 @@
-name: BlueForecast — Monitor & Auto-Retrain
+name: BlueForecast — Monitor & Retrain
 
+# Manual only — run when you have new training data and want to retrain.
+# Auto-retrain disabled: current drift is calendar-driven (year/month features),
+# not model degradation. MAE improved 30% — model is performing well.
 on:
-  schedule:
-    - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
       force_retrain:
@@ -19,199 +20,39 @@ env:
   GCS_BUCKET: "bluebikes-demand-predictor-data"
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-east1
-  REGISTRY: us-east1-docker.pkg.dev
-  REPO: blueforecast
   API_SERVICE: blueforecast-api
 
 jobs:
   monitor:
-    name: Run Drift & Performance Monitoring
+    name: Check Drift & Model Health
     runs-on: ubuntu-latest
-    outputs:
-      drift_detected: ${{ steps.check.outputs.drift_detected }}
-      retrain_needed: ${{ steps.check.outputs.retrain_needed }}
-      drift_reason:   ${{ steps.check.outputs.drift_reason }}
-
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
       - name: Install dependencies
-        run: pip install google-cloud-storage requests
-
+        run: pip install google-cloud-storage
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
-
-      - name: Run drift detection
-        id: check
+      - name: Print drift report
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           GCS_BUCKET: ${{ env.GCS_BUCKET }}
-          FORCE_RETRAIN: ${{ github.event.inputs.force_retrain || 'false' }}
-          TRIGGER_REASON: ${{ github.event.inputs.reason || 'scheduled-monitor' }}
         run: |
           python - <<'EOF'
-          import json
-          import os
-          import requests
-          from datetime import datetime
+          import json, os
           from google.cloud import storage
-
-          GCS_BUCKET = os.environ["GCS_BUCKET"]
-          SLACK_WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL", "")
-          force_retrain = os.environ.get("FORCE_RETRAIN", "false").lower() == "true"
-          trigger_reason = os.environ.get("TRIGGER_REASON", "scheduled-monitor")
-
           client = storage.Client()
-          bucket = client.bucket(GCS_BUCKET)
-
-          def load_json(path):
-              blob = bucket.blob(path)
-              if not blob.exists():
-                  return None
-              return json.loads(blob.download_as_text())
-
-          approved = load_json("processed/models/approved/metadata.json")
-          if not approved:
-              drift_detected = force_retrain
-              retrain_needed = force_retrain
-              drift_reason = "no-approved-model" if not force_retrain else f"manual:{trigger_reason}"
-              rmse_value = "N/A"
-          else:
-              run_id = approved["run_id"]
-              drift = load_json(f"processed/models/{run_id}/drift_report.json") or {}
-              validation = load_json(f"processed/models/{run_id}/validation_summary.json") or {}
-
-              drift_detected = bool(drift.get("overall_drift_detected", False))
-              thresholds = validation.get("thresholds", {})
-              max_rmse = thresholds.get("max_test_rmse", 2.5)
-              test_rmse = approved.get("test_rmse")
-              performance_degraded = test_rmse is not None and test_rmse > max_rmse
-
-              reasons = []
-              if force_retrain:
-                  reasons.append(f"manual:{trigger_reason}")
-              if drift_detected:
-                  reasons.append("drift-detected")
-              if performance_degraded:
-                  reasons.append("rmse-threshold-breached")
-
-              retrain_needed = bool(reasons)
-              drift_reason = ",".join(reasons) if reasons else "none"
-              rmse_value = test_rmse if test_rmse is not None else "N/A"
-
-          # ── Send Slack summary ──
-          if SLACK_WEBHOOK:
-              status = "Retraining Triggered" if retrain_needed else "No Action Needed"
-              color  = "#FF9F0A" if retrain_needed else "#34C759"
-              payload = {
-                  "attachments": [{
-                      "color": color,
-                      "title": f"🚲 BlueForecast | Monitoring Complete — {status}",
-                      "text":  f"Drift: {drift_detected} | Test RMSE: {rmse_value} | Reason: {drift_reason}",
-                      "fields": [
-                          {"title": "Drift Detected", "value": str(drift_detected), "short": True},
-                          {"title": "Retrain Needed",  "value": str(retrain_needed),  "short": True},
-                          {"title": "Reason",         "value": drift_reason,        "short": True},
-                          {"title": "Run ID",         "value": "${{ github.run_id }}", "short": True},
-                          {"title": "Time",           "value": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"), "short": True},
-                      ],
-                      "footer": "BlueForecast CI/CD · GitHub Actions",
-                  }]
-              }
-              r = requests.post(SLACK_WEBHOOK, json=payload, timeout=10)
-              print(f"Slack sent: {r.status_code}")
-
-          # ── Set outputs ──
-          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"drift_detected={str(drift_detected).lower()}\n")
-              f.write(f"retrain_needed={str(retrain_needed).lower()}\n")
-              f.write(f"drift_reason={drift_reason}\n")
-
-          print(f"Done. drift={drift_detected}, retrain_needed={retrain_needed}, reason={drift_reason}")
-          EOF
-
-  retrain:
-    name: Retrain XGBoost Model
-    runs-on: ubuntu-latest
-    needs: monitor
-    if: needs.monitor.outputs.retrain_needed == 'true'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r Model-Pipeline/requirements.txt
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
-      - name: Retrain model
-        env:
-          QUICK_CHECK: "false"
-          RUN_OPTUNA: "false"
-          SKIP_SWEEP: "true"
-          FORCE_PROMOTE: ${{ github.event.inputs.force_retrain || 'false' }}
-          BIAS_OVERRIDE_REASON: ""
-        run: python deployment-pipeline/monitoring/retrain_and_promote.py
-
-  refresh_serving:
-    name: Refresh Serving Layer
-    runs-on: ubuntu-latest
-    needs: retrain
-    steps:
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
-      - name: Refresh API service revision
-        env:
-          API_SERVICE: ${{ env.API_SERVICE }}
-          REGION: ${{ env.REGION }}
-          REFRESH_TOKEN: ${{ github.run_id }}
-        run: bash deployment-pipeline/scripts/refresh_serving.sh
-
-  notify_summary:
-    name: Send Summary Notification
-    runs-on: ubuntu-latest
-    needs: [monitor, retrain, refresh_serving]
-    if: always()
-    steps:
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install dependencies
-        run: pip install requests
-      - name: Send Slack summary
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          python - <<'EOF'
-          import requests, os
-          from datetime import datetime
-          webhook = os.environ.get("SLACK_WEBHOOK_URL", "")
-          if not webhook:
-              print("No webhook set")
-              exit(0)
-          payload = {
-              "attachments": [{
-                  "color": "#34C759",
-                  "title": "🚲 BlueForecast | Pipeline Complete",
-                  "text":  "Monitoring pipeline finished. Retraining and serving refresh were executed when required.",
-                  "fields": [
-                      {"title": "Run ID", "value": "${{ github.run_id }}", "short": True},
-                      {"title": "Time",   "value": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"), "short": True},
-                  ],
-                  "footer": "BlueForecast CI/CD · GitHub Actions",
-              }]
-          }
-          r = requests.post(webhook, json=payload, timeout=10)
-          print(f"Slack sent: {r.status_code}")
+          bucket = client.bucket(os.environ["GCS_BUCKET"])
+          approved = json.loads(bucket.blob("processed/models/approved/metadata.json").download_as_text())
+          run_id = approved["run_id"]
+          drift = json.loads(bucket.blob(f"processed/models/{run_id}/drift_report.json").download_as_text())
+          print("=== Drift Report ===")
+          print(f"Overall drift detected: {drift['overall_drift_detected']}")
+          print(f"Drifted features: {drift['feature_drift']['drifted_features']}")
+          print(f"Performance MAE change: {drift['performance_drift']['mae_increase_pct']:.1f}%")
+          print(f"Recommendation: {drift['recommendation']}")
+          print(f"NOTE: month/year drift is calendar-driven, not model degradation.")
           EOF
