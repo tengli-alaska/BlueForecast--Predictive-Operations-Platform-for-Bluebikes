@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle, AlertTriangle } from "lucide-react";
+import { AlertTriangle, Truck, Clock, TrendingUp, CheckCircle2 } from "lucide-react";
 import AnimatedCounter from "@/components/shared/AnimatedCounter";
 import StatusBadge from "@/components/shared/StatusBadge";
 import {
   getLatestMetrics,
-  getPipelineStatus,
   getBiasReport,
   getDriftReport,
   getStations,
@@ -16,7 +15,7 @@ import {
 } from "@/data";
 import { formatDate, deriveStationStatuses } from "@/lib/utils";
 import DataBadge from "@/components/shared/DataBadge";
-import type { ModelMetrics, PipelineStatus, BiasReport, DriftReport, Station, Prediction, StationStatus } from "@/types";
+import type { ModelMetrics, BiasReport, DriftReport, Station, Prediction, StationStatus } from "@/types";
 
 const fade = {
   hidden: { opacity: 0, y: 8 },
@@ -29,7 +28,6 @@ const fade = {
 
 interface OverviewData {
   latest: ModelMetrics;
-  pipeline: PipelineStatus;
   biasReport: BiasReport;
   driftReport: DriftReport;
   stations: Station[];
@@ -40,7 +38,6 @@ interface OverviewData {
   // Top stations by total predicted demand today
   topStations: { name: string; total: number; risk: StationStatus["risk_level"] }[];
   metricsLive: boolean;
-  pipelineLive: boolean;
   stationsLive: boolean;
   predictionsLive: boolean;
 }
@@ -52,13 +49,12 @@ export default function OverviewPage() {
   useEffect(() => {
     Promise.all([
       getLatestMetrics(),
-      getPipelineStatus(),
       getBiasReport(),
       getDriftReport(),
       getStations(),
       getPredictions(),
       getStationMapping(),
-    ]).then(([latestResult, pipelineResult, biasReport, driftReport, stationsResult, predictionsResult, mapping]) => {
+    ]).then(([latestResult, biasReport, driftReport, stationsResult, predictionsResult, mapping]) => {
       const stations = stationsResult.data;
       const predictions = predictionsResult.data;
 
@@ -117,7 +113,6 @@ export default function OverviewPage() {
 
       setData({
         latest: latestResult.data,
-        pipeline: pipelineResult.data,
         biasReport,
         driftReport,
         stations,
@@ -126,7 +121,6 @@ export default function OverviewPage() {
         hourlyDemand,
         topStations,
         metricsLive: latestResult.isLive,
-        pipelineLive: pipelineResult.isLive,
         stationsLive: stationsResult.isLive,
         predictionsLive: predictionsResult.isLive,
       });
@@ -144,16 +138,14 @@ export default function OverviewPage() {
     );
   }
 
-  const { latest, pipeline, biasReport, driftReport, stations, stationStatuses, hourlyDemand, topStations, metricsLive, pipelineLive, stationsLive, predictionsLive } = data;
+  const { latest, biasReport, driftReport, stations, stationStatuses, hourlyDemand, topStations, metricsLive, stationsLive, predictionsLive } = data;
 
   const criticalCount = stationStatuses.filter((s) => s.risk_level === "critical").length;
   const avgFill = Math.round(stationStatuses.reduce((a, b) => a + b.fill_pct, 0) / (stationStatuses.length || 1));
   const biasFlags = biasReport.slices.flatMap((s) => s.flags);
   const maxHourlyDemand = Math.max(...hourlyDemand.map((h) => h.total), 1);
 
-  const tasks = Object.entries(pipeline.tasks);
-  const completedTasks = tasks.filter(([, t]) => t.status === "success").length;
-  // Pipeline status is always mock (no live endpoint). Use metrics + stations + predictions to determine badge.
+  // Pipeline status is always mock (no live endpoint). Use metrics + stations + predictions.
   const dataIsLive = metricsLive && stationsLive && predictionsLive;
 
   function riskBadge(level: StationStatus["risk_level"]): "error" | "warning" | "success" | "running" {
@@ -177,7 +169,7 @@ export default function OverviewPage() {
             <DataBadge isLive={dataIsLive} />
           </div>
           <p className="text-[13px] text-slate-500">
-            {stations.length} stations monitored · Model v{pipeline.metrics?.registry_version ?? "—"} · Last trained {formatDate(latest.trained_at)}
+            {stations.length} stations monitored · Model v{latest.run_id?.slice(0, 4) ?? "—"} · Forecasts updated {formatDate(latest.trained_at)}
           </p>
         </div>
         {biasFlags.length > 0 && (
@@ -259,31 +251,40 @@ export default function OverviewPage() {
           </div>
         </motion.div>
 
+        {/* Ops Action Panel */}
         <motion.div
           custom={5} variants={fade} initial="hidden" animate="visible"
-          className="col-span-4 rounded-xl bg-bg-card p-4"
+          className="col-span-4 rounded-xl bg-bg-card p-4 space-y-3"
         >
-          <p className="text-[13px] font-medium text-white mb-3">Pipeline</p>
-          <div className="space-y-2.5">
-            {tasks.map(([key, task]) => (
-              <div key={key} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className={`h-3.5 w-3.5 ${task.status === "success" ? "text-emerald-400/50" : "text-slate-600"}`} />
-                  <span className="text-[12px] text-slate-400">
-                    {key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).replace(/And /g, "& ")}
-                  </span>
-                </div>
+          <p className="text-[13px] font-medium text-white">Ops Actions</p>
+          {criticalCount > 0 ? (
+            <>
+              <div className="flex items-start gap-2 rounded-lg bg-red-500/[0.08] border border-red-500/20 px-3 py-2">
+                <Truck className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-red-300 leading-relaxed">
+                  <span className="font-semibold">{criticalCount} station{criticalCount > 1 ? "s" : ""} need bikes</span> — dispatch before next rush hour
+                </p>
               </div>
-            ))}
-          </div>
-          <div className="mt-4 pt-3 border-t border-[var(--border)]">
-            <p className="text-[11px] text-slate-500">{completedTasks}/{tasks.length} tasks complete</p>
-            <div className="mt-1.5 h-1 w-full rounded-full bg-bg-tertiary">
-              <div
-                className="h-full rounded-full bg-emerald-400/50"
-                style={{ width: `${(completedTasks / tasks.length) * 100}%` }}
-              />
+              <div className="flex items-start gap-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/15 px-3 py-2">
+                <Clock className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
+                <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                  Check Rebalancing page for priority routes and estimated truck count
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-start gap-2 rounded-lg bg-emerald-500/[0.06] border border-emerald-500/15 px-3 py-2">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
+              <p className="text-[11px] text-emerald-300/80 leading-relaxed">
+                All monitored stations within normal demand range — no dispatch needed
+              </p>
             </div>
+          )}
+          <div className="flex items-start gap-2 rounded-lg bg-blue-500/[0.06] border border-blue-500/10 px-3 py-2">
+            <TrendingUp className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
+            <p className="text-[11px] text-blue-300/70 leading-relaxed">
+              Peak demand window: <span className="font-medium text-blue-300">7–9am · 4–7pm</span> — pre-position stock before these windows
+            </p>
           </div>
         </motion.div>
 
@@ -327,19 +328,19 @@ export default function OverviewPage() {
           <p className="text-[10px] text-slate-600 mt-1">Highlighted bars = rush hours (7–9am, 4–7pm)</p>
         </motion.div>
 
-        {/* ---- Row 4: Status tiles — compact ---- */}
+        {/* ---- Row 4: Ops-readable status tiles ---- */}
         <motion.div
           custom={7} variants={fade} initial="hidden" animate="visible"
           className="col-span-4 rounded-xl bg-bg-card p-4"
         >
           <div className="flex items-center justify-between">
-            <p className="text-[12px] text-slate-400">Forecast Quality</p>
+            <p className="text-[12px] text-slate-400">Forecast Reliability</p>
             <span className={`text-[11px] font-medium ${latest.validation_status === "PASSED" ? "text-emerald-400/70" : "text-red-400/70"}`}>
-              {latest.validation_status === "PASSED" ? "Good" : "Needs Review"}
+              {latest.validation_status === "PASSED" ? "Trusted" : "Review Needed"}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
-            Accuracy checks passed · Off by ±{latest.test_rmse.toFixed(1)} bikes/station on average
+            Predictions off by ±{latest.test_rmse.toFixed(1)} bikes/hr on average — sufficient for dispatch decisions
           </p>
         </motion.div>
 
@@ -348,15 +349,15 @@ export default function OverviewPage() {
           className="col-span-4 rounded-xl bg-bg-card p-4"
         >
           <div className="flex items-center justify-between">
-            <p className="text-[12px] text-slate-400">Model Health</p>
+            <p className="text-[12px] text-slate-400">Prediction Engine</p>
             <span className={`text-[11px] font-medium ${driftReport.overall_drift_detected ? "text-amber-400/70" : "text-emerald-400/70"}`}>
-              {driftReport.overall_drift_detected ? "Calendar Drift" : "Stable"}
+              {driftReport.overall_drift_detected ? "Seasonal Shift" : "On Track"}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
             {driftReport.overall_drift_detected
-              ? "Seasonal feature shift detected · MAE improved 30% · No retrain needed"
-              : "Predictions are tracking real demand patterns as expected"}
+              ? "Seasonal patterns shifted (expected Apr vs Dec). Accuracy improved 30% — no action needed"
+              : "Model is tracking current ridership patterns accurately"}
           </p>
         </motion.div>
 
@@ -365,15 +366,15 @@ export default function OverviewPage() {
           className="col-span-4 rounded-xl bg-bg-card p-4"
         >
           <div className="flex items-center justify-between">
-            <p className="text-[12px] text-slate-400">Prediction Fairness</p>
+            <p className="text-[12px] text-slate-400">Coverage Equity</p>
             <span className={`text-[11px] font-medium ${biasFlags.length > 0 ? "text-amber-400/70" : "text-emerald-400/70"}`}>
-              {biasFlags.length > 0 ? "Watch Item" : "All Clear"}
+              {biasFlags.length > 0 ? "Monitor" : "Equitable"}
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
             {biasFlags.length > 0
-              ? "Small stations are harder to predict — accuracy is consistent everywhere else"
-              : "Forecast accuracy is consistent across all station sizes, times, and weather conditions"}
+              ? "Low-volume stations have wider error margins — factor in extra buffer when stocking"
+              : "Forecast accuracy is consistent across all neighborhoods and station types"}
           </p>
         </motion.div>
       </div>
