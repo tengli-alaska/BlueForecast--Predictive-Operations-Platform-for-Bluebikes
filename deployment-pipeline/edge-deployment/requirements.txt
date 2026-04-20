@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# BlueForecast Edge Deployment — Python Dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Runtime dependencies (needed inside Docker container) ────────────────────
+onnxruntime>=1.17.0        # ONNX inference engine (CPU-only, lightweight)
+fastapi>=0.110.0           # Web framework
+uvicorn>=0.29.0            # ASGI server
+pydantic>=2.0              # Request/response validation
+numpy>=1.26.0              # Array operations
+
+# ── Export-time dependencies (needed only on dev machine, not in Docker) ─────
+# Install these separately when running export_to_onnx.py:
+#   pip install xgboost mlflow onnxmltools skl2onnx
+#
+# xgboost>=2.0.0           # Load trained model
+# mlflow>=2.10.0           # Pull model from MLflow registry
+# onnxmltools>=1.12.0      # XGBoost → ONNX conversion
+# skl2onnx>=1.16.0         # ONNX conversion utilities
+
+# ── Testing (dev only) ──────────────────────────────────────────────────────
+# pytest>=8.0.0
+# httpx>=0.27.0            # For testing FastAPI endpoints

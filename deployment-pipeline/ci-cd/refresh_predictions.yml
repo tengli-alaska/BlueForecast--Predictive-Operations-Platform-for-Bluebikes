@@ -1,0 +1,44 @@
+name: BlueForecast — Refresh Predictions
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours — fresh forecasts for ops team
+  workflow_dispatch:         # manual trigger for demo / on-demand
+
+env:
+  PYTHON_VERSION: "3.11"
+  GCS_BUCKET: "bluebikes-demand-predictor-data"
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  refresh:
+    name: Generate Fresh 24h Forecasts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r Model-Pipeline/requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
+
+      - name: Generate fresh 24h forecasts
+        env:
+          GCS_BUCKET: ${{ env.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ env.PROJECT_ID }}
+          PYTHONPATH: Model-Pipeline/src
+        run: |
+          python -c "from model_pipeline.predictor import run_prediction_pipeline; run_prediction_pipeline()"
+
+      - name: Verify predictions written
+        run: |
+          gcloud storage ls -l gs://${{ env.GCS_BUCKET }}/processed/predictions/latest/

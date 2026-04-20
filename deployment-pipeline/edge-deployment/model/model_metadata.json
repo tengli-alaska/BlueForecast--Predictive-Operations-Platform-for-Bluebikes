@@ -1,0 +1,52 @@
+{
+  "source_model": "model.ubj",
+  "model_type": "XGBoostRegressor",
+  "format": "ONNX",
+  "feature_columns": [
+    "start_station_id",
+    "capacity",
+    "hour_of_day",
+    "day_of_week",
+    "month",
+    "year",
+    "is_weekend",
+    "is_holiday",
+    "temperature_c",
+    "precipitation_mm",
+    "wind_speed_kmh",
+    "humidity_pct",
+    "feels_like_c",
+    "weather_code",
+    "is_cold",
+    "is_hot",
+    "is_precipitation",
+    "demand_lag_1h",
+    "demand_lag_24h",
+    "demand_lag_168h",
+    "rolling_avg_3h",
+    "rolling_avg_6h",
+    "rolling_avg_24h",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "month_sin",
+    "month_cos"
+  ],
+  "num_features": 29,
+  "metrics": {
+    "test_rmse": 1.28654,
+    "test_mae": 0.650969,
+    "test_r2": 0.702187,
+    "validation_status": "PASSED",
+    "bias_status": "PASSED"
+  },
+  "onnx_validation": {
+    "status": "PASSED",
+    "max_diff": 5.811452865600586e-07,
+    "mean_diff": 2.2426247880957817e-07
+  },
+  "onnx_file": "blueforecast.onnx",
+  "onnx_size_bytes": 1066937,
+  "source_size_bytes": 1340815
+}

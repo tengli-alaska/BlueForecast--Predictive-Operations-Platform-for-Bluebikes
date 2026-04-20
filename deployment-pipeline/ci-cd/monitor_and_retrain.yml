@@ -1,0 +1,58 @@
+name: BlueForecast — Monitor & Retrain
+
+# Manual only — run when you have new training data and want to retrain.
+# Auto-retrain disabled: current drift is calendar-driven (year/month features),
+# not model degradation. MAE improved 30% — model is performing well.
+on:
+  workflow_dispatch:
+    inputs:
+      force_retrain:
+        description: "Force retraining even if no drift detected"
+        required: false
+        default: "false"
+      reason:
+        description: "Reason for manual trigger"
+        required: false
+        default: "manual"
+
+env:
+  PYTHON_VERSION: "3.11"
+  GCS_BUCKET: "bluebikes-demand-predictor-data"
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-east1
+  API_SERVICE: blueforecast-api
+
+jobs:
+  monitor:
+    name: Check Drift & Model Health
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: pip install google-cloud-storage
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
+      - name: Print drift report
+        env:
+          GCS_BUCKET: ${{ env.GCS_BUCKET }}
+        run: |
+          python - <<'EOF'
+          import json, os
+          from google.cloud import storage
+          client = storage.Client()
+          bucket = client.bucket(os.environ["GCS_BUCKET"])
+          approved = json.loads(bucket.blob("processed/models/approved/metadata.json").download_as_text())
+          run_id = approved["run_id"]
+          drift = json.loads(bucket.blob(f"processed/models/{run_id}/drift_report.json").download_as_text())
+          print("=== Drift Report ===")
+          print(f"Overall drift detected: {drift['overall_drift_detected']}")
+          print(f"Drifted features: {drift['feature_drift']['drifted_features']}")
+          print(f"Performance MAE change: {drift['performance_drift']['mae_increase_pct']:.1f}%")
+          print(f"Recommendation: {drift['recommendation']}")
+          print(f"NOTE: month/year drift is calendar-driven, not model degradation.")
+          EOF

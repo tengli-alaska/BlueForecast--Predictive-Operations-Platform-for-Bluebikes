@@ -1,0 +1,11 @@
+# Disabled until tests are implemented
+name: Tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Tests coming soon"
