@@ -19,7 +19,8 @@ Complete deployment, serving, and monitoring package for the BlueForecast Bluebi
 9. [Notifications](#9-notifications)
 10. [Step-by-Step Replication Guide (Fresh Environment)](#10-step-by-step-replication-guide-fresh-environment)
 11. [Verifying Deployment](#11-verifying-deployment)
-12. [Monitoring Thresholds Reference](#12-monitoring-thresholds-reference)
+12. [Logs & Monitoring](#12-logs--monitoring)
+13. [Monitoring Thresholds Reference](#13-monitoring-thresholds-reference)
 
 ---
 
@@ -412,7 +413,7 @@ All five workflow files are in `ci-cd/` (reference copies; live versions in `.gi
 | `deploy_dashboard.yml` | Push to `main` touching `dashboard/` or `deployment-pipeline/`; manual | build-push → deploy → verify |
 | `model_pipeline.yml` | Push touching `Model-Pipeline/`; PR; manual | lint+test → docker-build → (optional) train |
 | `refresh_predictions.yml` | Cron `0 */6 * * *`; manual | generate 24h forecasts → verify GCS write |
-| `monitor_and_retrain.yml` | Manual dispatch only | fetch drift report → print health summary |
+| `monitor_and_retrain.yml` | Manual dispatch only | Job 1: drift health check + report. Job 2: full retrain → validate → promote → Slack notify (runs if drift detected or `force_retrain=true`) |
 | `tests.yml` | — | Placeholder (integration tests coming) |
 
 ---
@@ -486,15 +487,19 @@ GitHub → Actions → "BlueForecast — Refresh Predictions" → Run workflow
 
 ### `monitor_and_retrain.yml` — Drift Check & Retraining
 
-Manual-only workflow. Loads the approved model metadata and its drift report from GCS and prints a health summary.
+Manual-only workflow with two sequential jobs:
+
+**Job 1 — `monitor`**: Loads the approved model metadata and drift report from GCS, prints a full health summary, and sets a `drift_detected` output flag.
+
+**Job 2 — `retrain`**: Runs if `force_retrain=true` OR `drift_detected=true`. Executes the full `retrain_and_promote.py` pipeline, then refreshes the Cloud Run serving revision. Sends a Slack alert on failure.
 
 ```
 GitHub → Actions → "BlueForecast — Monitor & Retrain" → Run workflow
-  force_retrain: true    # retrain even if no drift detected
+  force_retrain: true       # retrain even if no drift detected
   reason: "new data available"
 ```
 
-Auto-retraining is intentionally disabled — current drift is calendar-driven (month/year features), not model degradation. MAE improved 30% on the current model. Full retrain is triggered manually when new training data is available.
+> Auto-retraining on a schedule is intentionally disabled — current drift is calendar-driven (month/year features), not model degradation. MAE improved 30% on the current model. Full retrain is triggered manually when new training data is available.
 
 ---
 
@@ -884,7 +889,75 @@ curl http://localhost:8080/model-info
 
 ---
 
-## 12. Monitoring Thresholds Reference
+## 12. Logs & Monitoring
+
+### What Gets Logged and Where
+
+| Layer | What is logged | Where it lives |
+|-------|---------------|----------------|
+| Training runs | Params, RMSE, MAE, R², artifacts, tags | MLflow (`mlruns/` locally, GCS remotely) |
+| Drift report | Per-feature KS test results, MAE delta, recommendation | `gs://.../processed/models/{run_id}/drift_report.json` |
+| Performance metrics | 7-day rolling RMSE/MAE, daily breakdown | `gs://.../processed/reports/performance_latest.json` |
+| Model metadata | run_id, RMSE, promotion status, dataset hash | `gs://.../processed/models/approved/metadata.json` |
+| Predictions | Hourly forecasts for all stations | `gs://.../processed/predictions/latest/*.parquet` |
+| Cloud Run logs | API request/response, errors, startup | GCP Cloud Logging (automatic) |
+| CI/CD run logs | Each workflow step output | GitHub Actions → Actions tab |
+| Edge server health | Model loaded, uptime, inference time | `/health` endpoint response body |
+
+### Reading Cloud Run Logs
+
+```bash
+# Stream live API logs
+gcloud logging read "resource.type=cloud_run_revision \
+  AND resource.labels.service_name=blueforecast-api" \
+  --limit=50 --format="table(timestamp,textPayload)"
+
+# Filter for errors only
+gcloud logging read "resource.type=cloud_run_revision \
+  AND resource.labels.service_name=blueforecast-api \
+  AND severity>=ERROR" --limit=20
+```
+
+### Reading MLflow Logs
+
+```bash
+# View all training runs
+cd Model-Pipeline
+mlflow ui --port 5000
+# Open http://localhost:5000 in browser
+
+# Or inspect directly
+python3 -c "
+import mlflow
+mlflow.set_tracking_uri('mlruns')
+runs = mlflow.search_runs(order_by=['start_time DESC'])
+print(runs[['run_id','metrics.val_rmse','metrics.test_rmse','status']].head(10))
+"
+```
+
+### Reading GCS Reports
+
+```bash
+# Latest drift report
+gcloud storage cat \
+  gs://bluebikes-demand-predictor-data/processed/reports/drift_latest.json | python3 -m json.tool
+
+# Latest performance metrics
+gcloud storage cat \
+  gs://bluebikes-demand-predictor-data/processed/reports/performance_latest.json | python3 -m json.tool
+
+# Approved model metadata
+gcloud storage cat \
+  gs://bluebikes-demand-predictor-data/processed/models/approved/metadata.json | python3 -m json.tool
+```
+
+### Log Retention
+
+GCS bucket lifecycle rules (`Model-Pipeline/lifecycle.json`) automatically delete pipeline crash logs older than 30 days from `processed/pipeline-logs/crashes/`. All model artifacts and reports are retained indefinitely.
+
+---
+
+## 13. Monitoring Thresholds Reference
 
 Full config: [`monitoring/thresholds.yaml`](monitoring/thresholds.yaml)
 

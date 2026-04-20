@@ -23,9 +23,14 @@ env:
   API_SERVICE: blueforecast-api
 
 jobs:
+  # ---------------------------------------------------------------
+  # Job 1: Check drift and print health report
+  # ---------------------------------------------------------------
   monitor:
     name: Check Drift & Model Health
     runs-on: ubuntu-latest
+    outputs:
+      drift_detected: ${{ steps.drift.outputs.drift_detected }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -38,6 +43,7 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
       - name: Print drift report
+        id: drift
         env:
           GCS_BUCKET: ${{ env.GCS_BUCKET }}
         run: |
@@ -55,4 +61,71 @@ jobs:
           print(f"Performance MAE change: {drift['performance_drift']['mae_increase_pct']:.1f}%")
           print(f"Recommendation: {drift['recommendation']}")
           print(f"NOTE: month/year drift is calendar-driven, not model degradation.")
+          # Set output for downstream job
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"drift_detected={str(drift['overall_drift_detected']).lower()}\n")
           EOF
+
+  # ---------------------------------------------------------------
+  # Job 2: Retrain, validate, and promote model
+  # Runs if: force_retrain=true OR drift was detected
+  # ---------------------------------------------------------------
+  retrain:
+    name: Retrain + Validate + Promote
+    runs-on: ubuntu-latest
+    needs: monitor
+    if: >
+      github.event.inputs.force_retrain == 'true' ||
+      needs.monitor.outputs.drift_detected == 'true'
+    env:
+      PYTHONPATH: Model-Pipeline/src
+      MLFLOW_TRACKING_URI: mlruns
+      GCS_BUCKET: ${{ env.GCS_BUCKET }}
+      GOOGLE_CLOUD_PROJECT: ${{ env.PROJECT_ID }}
+      RETRAIN_REASON: ${{ github.event.inputs.reason }}
+      FORCE_PROMOTE: ${{ github.event.inputs.force_retrain }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r Model-Pipeline/requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
+
+      - name: Run retrain + promote pipeline
+        run: |
+          echo "=== Starting retraining pipeline ==="
+          echo "Reason: ${{ github.event.inputs.reason }}"
+          python3 deployment-pipeline/monitoring/retrain_and_promote.py
+
+      - name: Refresh Cloud Run serving revision
+        if: success()
+        env:
+          API_SERVICE: ${{ env.API_SERVICE }}
+          REGION: ${{ env.REGION }}
+          REFRESH_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: bash deployment-pipeline/scripts/refresh_serving.sh
+
+      - name: Notify Slack on retrain failure
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "text": ":red_circle: *BlueForecast Retrain Failed*\n*Reason:* `${{ github.event.inputs.reason }}`\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

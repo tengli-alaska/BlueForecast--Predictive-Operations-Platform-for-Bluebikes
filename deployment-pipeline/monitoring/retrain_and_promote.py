@@ -23,6 +23,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MODEL_PIPELINE_DIR = REPO_ROOT / "Model-Pipeline"
 sys.path.insert(0, str(MODEL_PIPELINE_DIR / "src"))
 
+# Notify module lives alongside this script
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from notify import (  # noqa: E402
+    notify_drift_detected,
+    notify_model_promoted,
+    notify_retrain_skipped,
+    notify_retrain_triggered,
+)
+
 from model_pipeline.bias_detection import detect_model_bias
 from model_pipeline.data_loader import FEATURE_COLS, get_X_y, load_feature_matrix
 from model_pipeline.drift_detector import run_drift_detection_pipeline
@@ -57,6 +66,11 @@ def save_drift_report(run_id: str, drift_report: dict) -> str:
 def main() -> None:
     os.chdir(MODEL_PIPELINE_DIR)
     _setup_mlflow()
+
+    notify_retrain_triggered(
+        reason=os.getenv("RETRAIN_REASON", "manual"),
+        run_id="pending",
+    )
 
     logger.info("Loading feature matrix")
     df, dataset_version_hash, _label_encoder = load_feature_matrix()
@@ -162,6 +176,9 @@ def main() -> None:
         "ALERT" if drift_report["overall_drift_detected"] else "STABLE",
     )
 
+    if drift_report["overall_drift_detected"]:
+        notify_drift_detected(drift_report)
+
     logger.info("Promoting candidate through registry gates")
     registry_metadata = register_model(
         run_id=run_id,
@@ -172,14 +189,23 @@ def main() -> None:
         force_promote=FORCE_PROMOTE,
     )
 
+    promoted = registry_metadata.get("promoted", False)
+    production_rmse = registry_metadata.get("production_rmse", val_rmse)
+
+    if promoted:
+        notify_model_promoted(new_rmse=val_rmse, old_rmse=production_rmse)
+    else:
+        notify_retrain_skipped(new_rmse=val_rmse, old_rmse=production_rmse)
+
     logger.info("Generating production predictions from champion model")
     predictions_df = run_prediction_pipeline()
 
     logger.info(
-        "Retraining pipeline complete | run_id=%s | registry_version=%s | rows=%s",
+        "Retraining pipeline complete | run_id=%s | registry_version=%s | rows=%s | promoted=%s",
         run_id,
         registry_metadata["registry_version"],
         len(predictions_df),
+        promoted,
     )
 
 
