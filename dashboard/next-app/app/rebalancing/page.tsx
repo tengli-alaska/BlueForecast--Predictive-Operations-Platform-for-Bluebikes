@@ -186,13 +186,12 @@ export default function RebalancingPage() {
         station_id: a32ToGbfs[p.station_id] ?? p.station_id,
       }));
 
-      // Use real predictions to derive risk if both are live, else use mock
+      // Use real predictions to derive risk; show empty if no live data
       const finalStatuses = (stationsResult.isLive && predictionsResult.isLive)
         ? deriveStationStatuses(stations, translatedPredictions)
         : mockStationStatuses;
       setStationStatuses(finalStatuses);
 
-      // Generate routes from actual station data; fall back to showcase routes
       const dynamicRoutes = buildRoutes(finalStatuses, lookup);
       setRoutes(dynamicRoutes.length >= 2 ? dynamicRoutes : FALLBACK_ROUTES);
     }).finally(() => setLoading(false));

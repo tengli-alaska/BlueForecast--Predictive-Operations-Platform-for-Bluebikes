@@ -141,7 +141,7 @@ export default function StationMap({
 
         {stations.map((station) => {
           const prediction = predictionMap.get(station.station_id);
-          const demand = prediction?.predicted_demand ?? 0;
+          const demand = prediction?.peak_demand ?? prediction?.predicted_demand ?? 0;
           const fillColor = getDemandColor(demand);
           const strokeColor = darken(fillColor);
           const radius = clampRadius(station.capacity);

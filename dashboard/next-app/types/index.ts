@@ -11,6 +11,7 @@ export interface Prediction {
   station_id: string;
   forecast_hour: string;
   predicted_demand: number;
+  peak_demand?: number;
   model_version: number;
   generated_at: string;
 }

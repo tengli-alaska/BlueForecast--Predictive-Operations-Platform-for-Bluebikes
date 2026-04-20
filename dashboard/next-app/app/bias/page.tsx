@@ -46,7 +46,6 @@ export default function BiasPage() {
   useEffect(() => {
     getBiasReport().then((r) => {
       setReport(r);
-      // getBiasReport falls back to mock only when GCS is unavailable
       setIsLive(r.total_rows > 0);
     }).finally(() => setLoading(false));
   }, []);

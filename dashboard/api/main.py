@@ -112,6 +112,52 @@ async def get_stations():
     return df_to_records(df)
 
 
+def _get_a32_to_gbfs_map() -> dict:
+    """Return A32xxx → GBFS UUID lookup, trying station_id_mapping then feature_matrix."""
+    mapping_df = gcs.read_parquet("processed/stations/station_id_mapping.parquet", ttl=3600)
+    if mapping_df is not None and "gbfs_station_id" in mapping_df.columns:
+        return dict(zip(mapping_df["start_station_id"], mapping_df["gbfs_station_id"].fillna("")))
+    fm = gcs.read_parquet("processed/features/feature_matrix.parquet", ttl=3600)
+    if fm is not None and "gbfs_station_id" in fm.columns and "start_station_id" in fm.columns:
+        sub = fm[["start_station_id", "gbfs_station_id"]].drop_duplicates("start_station_id")
+        return dict(zip(sub["start_station_id"], sub["gbfs_station_id"].fillna("")))
+    return {}
+
+
+def _translate_station_ids(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace A32xxx station_id values with GBFS UUIDs where mapping is available."""
+    a32_to_gbfs = _get_a32_to_gbfs_map()
+    if not a32_to_gbfs:
+        return df
+    df = df.copy()
+    df["station_id"] = df["station_id"].map(lambda sid: a32_to_gbfs.get(sid) or sid)
+    return df
+
+
+def _resolve_station_id(requested_id: str, df: pd.DataFrame) -> pd.DataFrame:
+    """Filter predictions by station_id, trying GBFS UUID → A32xxx translation if needed."""
+    filtered = df[df["station_id"] == requested_id]
+    if not filtered.empty:
+        return filtered
+    # No direct match — try translating via station mapping (GBFS UUID → A32xxx)
+    mapping_df = gcs.read_parquet("processed/stations/station_id_mapping.parquet", ttl=3600)
+    if mapping_df is not None and "gbfs_station_id" in mapping_df.columns:
+        row = mapping_df[mapping_df["gbfs_station_id"] == requested_id]
+        if not row.empty:
+            a32_id = row.iloc[0]["start_station_id"]
+            filtered = df[df["station_id"] == a32_id]
+            if not filtered.empty:
+                return filtered
+    # Also try feature_matrix fallback
+    fm = gcs.read_parquet("processed/features/feature_matrix.parquet", ttl=3600)
+    if fm is not None and "gbfs_station_id" in fm.columns and "start_station_id" in fm.columns:
+        row = fm[fm["gbfs_station_id"] == requested_id]
+        if not row.empty:
+            a32_id = row.iloc[0]["start_station_id"]
+            filtered = df[df["station_id"] == a32_id]
+    return filtered
+
+
 @app.get("/api/predictions")
 async def get_predictions(
     station_id: Optional[str] = Query(None),
@@ -119,7 +165,8 @@ async def get_predictions(
 ):
     """Return demand predictions.
 
-    - station_id: filter to one station, returns all 24 hourly rows
+    - station_id: filter to one station, returns all 24 hourly rows.
+      Accepts both GBFS UUIDs and A32xxx trip IDs — translated automatically.
     - mode=full (default): all 24h rows for ALL stations — use only when needed
     - mode=summary: one row per station (peak hour + avg demand) — ~30KB vs 2MB
       Used by Overview and Rebalancing for network-wide views.
@@ -131,8 +178,8 @@ async def get_predictions(
             content={"detail": "Prediction data unavailable", "predictions": []},
         )
     if station_id:
-        df = df[df["station_id"] == station_id]
-        return df_to_records(df)
+        filtered = _resolve_station_id(station_id, df)
+        return df_to_records(filtered)
 
     if mode == "summary":
         # One row per station: avg + peak demand across 24h
@@ -148,7 +195,7 @@ async def get_predictions(
             )
             .reset_index()
         )
-        return df_to_records(agg)
+        return df_to_records(_translate_station_ids(agg))
 
     if mode == "network":
         # 24 rows — one per hour — total demand across ALL stations
@@ -163,9 +210,9 @@ async def get_predictions(
             .reset_index()
             .sort_values("hour")
         )
-        return df_to_records(hourly)
+        return df_to_records(hourly)  # network mode has no station_id column
 
-    return df_to_records(df)
+    return df_to_records(_translate_station_ids(df))
 
 
 @app.get("/api/metrics/latest")

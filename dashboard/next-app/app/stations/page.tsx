@@ -30,10 +30,18 @@ export default function StationsPage() {
       for (const row of mapping) {
         if (row.gbfs_station_id) a32ToGbfs[row.start_station_id] = row.gbfs_station_id;
       }
-      const translatedPredictions = predictionsResult.data.map((p) => ({
-        ...p,
-        station_id: a32ToGbfs[p.station_id] ?? p.station_id,
-      }));
+      // Translate IDs and collapse to one row per station (peak demand)
+      const peakByStation = new Map<string, Prediction>();
+      for (const p of predictionsResult.data) {
+        const sid = a32ToGbfs[p.station_id] ?? p.station_id;
+        const existing = peakByStation.get(sid);
+        const thisDemand = p.peak_demand ?? p.predicted_demand;
+        const existingDemand = existing ? (existing.peak_demand ?? existing.predicted_demand) : -1;
+        if (!existing || thisDemand > existingDemand) {
+          peakByStation.set(sid, { ...p, station_id: sid, peak_demand: thisDemand });
+        }
+      }
+      const translatedPredictions = Array.from(peakByStation.values());
       setData({ stations: stationsResult.data, predictions: translatedPredictions, isLive: stationsResult.isLive && predictionsResult.isLive });
     }).finally(() => setLoading(false));
   }, []);
@@ -55,10 +63,11 @@ export default function StationsPage() {
 
   const stationMaxDemand = new Map<string, number>();
   for (const p of predictions) {
+    const d = p.peak_demand ?? p.predicted_demand;
     const cur = stationMaxDemand.get(p.station_id) ?? 0;
-    if (p.predicted_demand > cur) stationMaxDemand.set(p.station_id, p.predicted_demand);
+    if (d > cur) stationMaxDemand.set(p.station_id, d);
   }
-  const highDemandCount = Array.from(stationMaxDemand.values()).filter((d) => d >= 5).length;
+  const highDemandCount = Array.from(stationMaxDemand.values()).filter((d) => d >= 3).length;
 
   return (
     <div className="p-5 md:p-7 space-y-5">

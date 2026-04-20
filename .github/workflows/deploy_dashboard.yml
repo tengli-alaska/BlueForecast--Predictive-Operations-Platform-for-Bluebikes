@@ -7,6 +7,7 @@ on:
       - deployment-kickstart-sruthilaya  # temporary for testing
     paths:
       - 'dashboard/**'
+      - 'deployment-pipeline/**'
   workflow_dispatch:  # Allow manual trigger for testing
 
 env:

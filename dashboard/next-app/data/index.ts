@@ -45,8 +45,6 @@ export async function getPredictions(stationId?: string, mode: "full" | "summary
     : `/api/predictions?mode=${mode}`;
   const raw = await fetchJson(url, null);
   if (Array.isArray(raw) && raw.length > 0) return { data: raw, isLive: true };
-  // If stationId doesn't match any mock (e.g. live GBFS UUID when API is down),
-  // fall back to the first mock station's predictions so the chart is never empty.
   const filtered = stationId ? mockPredictions.filter(p => p.station_id === stationId) : mockPredictions;
   const mock = filtered.length > 0 ? filtered : mockPredictions.filter(p => p.station_id === mockPredictions[0]?.station_id);
   return { data: mock, isLive: false };
@@ -61,7 +59,6 @@ export async function getPredictionsNetwork(): Promise<{ data: { hour: number; t
       isLive: true,
     };
   }
-  // Fallback: derive from mock predictions
   const hourTotals: Record<number, number> = {};
   for (const p of mockPredictions) {
     const h = new Date(p.forecast_hour).getHours();
@@ -128,11 +125,6 @@ export async function getFeatureImportance(): Promise<{ data: FeatureImportance[
   return { data: mockFeatureImportance, isLive: false };
 }
 
-/**
- * Normalize API bias report (dimensions dict) to dashboard format (slices array).
- * API format: { dimensions: { time_of_day: { groups: { night: { rmse, mae, count } }, disparity_ratio, ... } }, violations: [] }
- * Dashboard format: { slices: [{ slice_name, groups: [{ group, count, ... }], disparity_ratio, flags }], total_rows, total_flags }
- */
 export async function getBiasReport(): Promise<BiasReport> {
   const data = await fetchJson("/api/bias-report", null);
   if (data && data.dimensions) {
@@ -168,10 +160,6 @@ export async function getBiasReport(): Promise<BiasReport> {
   return mockBiasReport;
 }
 
-/**
- * Normalize API drift report to dashboard format.
- * API format already matches closely, but we ensure all fields exist.
- */
 export async function getDriftReport(scenario?: "stable" | "alert"): Promise<DriftReport> {
   const data = await fetchJson("/api/drift-report", null);
   if (data && typeof data.overall_drift_detected !== "undefined") {
@@ -210,11 +198,6 @@ export async function getPipelineStatus(): Promise<{ data: PipelineStatus; isLiv
   return { data: mockPipelineStatus, isLive: false };
 }
 
-/**
- * Fetch the station ID mapping produced by the feature engineering pipeline.
- * Maps A32xxx operational IDs (used in predictions) → GBFS UUIDs (used in stations).
- * Returns null entries if the pipeline hasn't run yet (fallback: skip per-station filtering).
- */
 export async function getStationMapping(): Promise<{ start_station_id: string; gbfs_station_id: string | null; station_name?: string }[]> {
   const raw = await fetchJson("/api/station-mapping", null);
   if (Array.isArray(raw) && raw.length > 0) return raw;
