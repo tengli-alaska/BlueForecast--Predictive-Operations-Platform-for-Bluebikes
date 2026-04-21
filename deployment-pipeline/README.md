@@ -91,7 +91,8 @@ deployment-pipeline/
 ├── scripts/                               ← Cloud deployment scripts
 │   ├── deploy_dashboard.sh                ← Build + push Docker images; deploy to Cloud Run
 │   ├── refresh_serving.sh                 ← Refresh Cloud Run revision after model promotion
-│   └── verify_deployment.sh              ← POST-deploy API health check
+│   ├── verify_deployment.sh              ← POST-deploy API health check
+│   └── setup_gcp_monitoring.sh           ← Create GCP uptime check + log-based error alert
 │
 ├── monitoring/                            ← All monitoring, alerting, and retraining
 │   ├── retrain_and_promote.py             ← End-to-end retrain + gate + promote orchestrator
@@ -843,6 +844,20 @@ pip install pytest httpx
 pytest tests/test_inference.py -v
 # → 18 passed
 ```
+
+### Step 14 — (Optional) Set Up GCP Cloud Monitoring
+
+Creates an uptime check (pings `/api/health` every 5 minutes) and a log-based alert (fires on any ERROR log in the API service).
+
+```bash
+export PROJECT_ID="<YOUR_PROJECT_ID>"
+export NOTIFICATION_EMAIL="your-email@example.com"   # optional
+bash deployment-pipeline/scripts/setup_gcp_monitoring.sh
+```
+
+View results in GCP Console:
+- Uptime checks: `https://console.cloud.google.com/monitoring/uptime?project=<YOUR_PROJECT_ID>`
+- Alert policies: `https://console.cloud.google.com/monitoring/alerting?project=<YOUR_PROJECT_ID>`
 
 ---
 
