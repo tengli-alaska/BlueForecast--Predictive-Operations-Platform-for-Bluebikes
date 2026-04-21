@@ -34,7 +34,7 @@ jobs:
           cache: pip
 
       - name: Install edge dependencies
-        run: pip install -r requirements.txt pytest httpx
+        run: pip install -r requirements.txt pytest httpx xgboost
 
       - name: Run edge unit tests (schema + cyclical features + request conversion)
         run: pytest tests/test_inference.py -v --tb=short -k "not TestONNXModel and not TestAPIEndpoints and not TestMetadata"

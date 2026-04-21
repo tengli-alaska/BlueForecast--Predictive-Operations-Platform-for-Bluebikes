@@ -1,4 +1,4 @@
-name: BlueForecast — Refresh Predictions
+name: BlueForecast - Refresh Predictions
 
 on:
   schedule:
