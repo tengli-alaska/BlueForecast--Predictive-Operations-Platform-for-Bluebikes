@@ -352,16 +352,55 @@ The data pipeline produces a feature matrix at `processed/features/feature_matri
 
 ---
 
+## Deployment
+
+The full deployment pipeline (Cloud Run, edge inference, CI/CD, monitoring) is documented in [`deployment-pipeline/README.md`](deployment-pipeline/README.md).
+
+### Quick summary
+
+| Component | Where it runs | How it's deployed |
+|-----------|--------------|-------------------|
+| FastAPI inference API | GCP Cloud Run | Auto-deployed on push to `main` via GitHub Actions |
+| Next.js operations dashboard | GCP Cloud Run | Auto-deployed on push to `main` via GitHub Actions |
+| Prediction refresh | GCS | Scheduled every 6h via GitHub Actions cron |
+| Model monitoring + retraining | GCP + MLflow | Scheduled weekly; also manual dispatch |
+| Edge inference server | Any device | Docker + ONNX, zero cloud dependencies |
+
+### Replication steps (abbreviated)
+
+```bash
+# 1. Set up GCP service account and GitHub secrets (one-time)
+#    See deployment-pipeline/README.md Section 10 for full commands
+
+# 2. Push to main — dashboard deploys automatically via GitHub Actions
+
+# 3. Verify
+gcloud run services list --region=us-east1
+curl "$(gcloud run services describe blueforecast-api \
+  --region=us-east1 --format='value(status.url)')/api/health"
+```
+
+For complete step-by-step instructions including GCP setup, secrets configuration, edge deployment, and validation, see **[deployment-pipeline/README.md → Section 10](deployment-pipeline/README.md#10-step-by-step-replication-guide-fresh-environment)**.
+
+---
+
 ## Reproducibility
 
-To replicate this pipeline on a new machine:
+To replicate the full project on a new machine:
 
+### Data pipeline
 1. Clone the repo and install dependencies (`requirements.txt`)
 2. Set up GCP credentials (`gcloud auth application-default login`)
 3. Start Airflow (`docker compose up -d`)
 4. Trigger the DAG from the Airflow UI
 5. Verify with `pytest tests/test_pipeline.py -v`
 6. Use `dvc pull` to fetch data from GCS, or `dvc repro` to regenerate
+
+### Model training
+See [`Model-Pipeline/README.md`](Model-Pipeline/README.md) for training, evaluation, and HPO steps.
+
+### Deployment
+See [`deployment-pipeline/README.md`](deployment-pipeline/README.md) for cloud deployment, edge inference, CI/CD, and monitoring replication.
 
 All code, configuration, and pipeline definitions are version-controlled. Data is versioned separately via DVC with GCS remote.
 

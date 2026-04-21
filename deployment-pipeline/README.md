@@ -115,10 +115,10 @@ deployment-pipeline/
 │
 └── ci-cd/                                 ← GitHub Actions workflow reference copies
     ├── deploy_dashboard.yml               ← Trigger: push to main (dashboard/ or deployment-pipeline/)
-    ├── model_pipeline.yml                 ← Trigger: push to Model-Pipeline/ or manual
+    ├── model_pipeline.yml                 ← Trigger: push to Model-Pipeline/; cron weekly (Mon 03:00 UTC); manual
     ├── refresh_predictions.yml            ← Trigger: cron every 6h or manual
-    ├── monitor_and_retrain.yml            ← Trigger: manual dispatch only
-    └── tests.yml                          ← Integration tests (placeholder)
+    ├── monitor_and_retrain.yml            ← Trigger: cron weekly (Sun 02:00 UTC); manual dispatch
+    └── tests.yml                          ← Trigger: push/PR to main; edge tests + API integration + script smoke
 ```
 
 Other project folders used by the deployment scripts (not copied here):
@@ -411,10 +411,10 @@ All five workflow files are in `ci-cd/` (reference copies; live versions in `.gi
 | File | Trigger | Jobs |
 |------|---------|------|
 | `deploy_dashboard.yml` | Push to `main` touching `dashboard/` or `deployment-pipeline/`; manual | build-push → deploy → verify |
-| `model_pipeline.yml` | Push touching `Model-Pipeline/`; PR; manual | lint+test → docker-build → (optional) train |
+| `model_pipeline.yml` | Push touching `Model-Pipeline/`; PR; cron Mon 03:00 UTC; manual | lint+test → docker-build → train (on schedule or manual) |
 | `refresh_predictions.yml` | Cron `0 */6 * * *`; manual | generate 24h forecasts → verify GCS write |
-| `monitor_and_retrain.yml` | Manual dispatch only | Job 1: drift health check + report. Job 2: full retrain → validate → promote → Slack notify (runs if drift detected or `force_retrain=true`) |
-| `tests.yml` | — | Placeholder (integration tests coming) |
+| `monitor_and_retrain.yml` | Cron Sun 02:00 UTC; manual dispatch | Job 1: drift health check + report. Job 2: full retrain → ONNX export → validate → promote → Slack notify (runs if drift detected or `force_retrain=true`) |
+| `tests.yml` | Push/PR to `main`; manual | edge unit tests → API integration tests → script smoke tests → Slack notify on failure |
 
 ---
 
@@ -499,7 +499,7 @@ GitHub → Actions → "BlueForecast — Monitor & Retrain" → Run workflow
   reason: "new data available"
 ```
 
-> Auto-retraining on a schedule is intentionally disabled — current drift is calendar-driven (month/year features), not model degradation. MAE improved 30% on the current model. Full retrain is triggered manually when new training data is available.
+> The workflow runs automatically every Sunday at 02:00 UTC. It checks for drift and only retrains if drift is detected. Manual dispatch with `force_retrain=true` triggers retraining unconditionally regardless of drift status.
 
 ---
 
@@ -760,11 +760,16 @@ This deploys both Cloud Run services, wires `API_BASE_URL` into the dashboard, a
 ### Step 10 — Verify the Deployment
 
 ```bash
+# Fetch the deployed service URLs
 export API_URL="$(gcloud run services describe blueforecast-api \
-  --region=us-east1 --format='value(status.url)')"
+  --region=us-east1 --project=$PROJECT_ID --format='value(status.url)')"
 export DASHBOARD_URL="$(gcloud run services describe blueforecast-dashboard \
-  --region=us-east1 --format='value(status.url)')"
+  --region=us-east1 --project=$PROJECT_ID --format='value(status.url)')"
 
+echo "API:       $API_URL"
+echo "Dashboard: $DASHBOARD_URL"
+
+# Run health verification
 bash deployment-pipeline/scripts/verify_deployment.sh
 ```
 
