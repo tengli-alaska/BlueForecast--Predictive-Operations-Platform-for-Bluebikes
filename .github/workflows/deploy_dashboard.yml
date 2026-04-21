@@ -4,10 +4,10 @@ on:
   push:
     branches:
       - main
-      - deployment-kickstart-sruthilaya  # temporary for testing
     paths:
       - 'dashboard/**'
       - 'deployment-pipeline/**'
+      - 'Model-Pipeline/**'
   workflow_dispatch:  # Allow manual trigger for testing
 
 env:
