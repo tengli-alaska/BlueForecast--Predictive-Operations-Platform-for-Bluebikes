@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       drift_detected: ${{ steps.drift.outputs.drift_detected }}
+      performance_degraded: ${{ steps.perf.outputs.performance_degraded }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -60,10 +61,52 @@ jobs:
           print(f"Drifted features: {drift['feature_drift']['drifted_features']}")
           print(f"Performance MAE change: {drift['performance_drift']['mae_increase_pct']:.1f}%")
           print(f"Recommendation: {drift['recommendation']}")
-          print(f"NOTE: month/year drift is calendar-driven, not model degradation.")
-          # Set output for downstream job
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"drift_detected={str(drift['overall_drift_detected']).lower()}\n")
+          EOF
+
+      - name: Check live rolling performance (7-day RMSE)
+        id: perf
+        env:
+          GCS_BUCKET: ${{ env.GCS_BUCKET }}
+        run: |
+          python - <<'EOF'
+          import json, os
+          from google.cloud import storage
+
+          RMSE_MULTIPLIER_THRESHOLD = 1.50
+          MAE_ABSOLUTE_THRESHOLD = 4.0
+          BASELINE_RMSE = 1.28654  # approved model test RMSE
+
+          client = storage.Client()
+          bucket = client.bucket(os.environ["GCS_BUCKET"])
+
+          degraded = False
+          try:
+              perf = json.loads(bucket.blob("processed/reports/performance_latest.json").download_as_text())
+              print("=== Live Performance (7-day rolling) ===")
+              print(f"Status:       {perf.get('status')}")
+              print(f"7d RMSE:      {perf.get('rmse_7d')}")
+              print(f"7d MAE:       {perf.get('mae_7d')}")
+              print(f"Sample count: {perf.get('sample_count')}")
+
+              rmse_7d = perf.get("rmse_7d")
+              mae_7d  = perf.get("mae_7d")
+
+              if rmse_7d is not None and rmse_7d > BASELINE_RMSE * RMSE_MULTIPLIER_THRESHOLD:
+                  print(f"ALERT: 7d RMSE {rmse_7d:.4f} exceeds threshold ({BASELINE_RMSE * RMSE_MULTIPLIER_THRESHOLD:.4f})")
+                  degraded = True
+              if mae_7d is not None and mae_7d > MAE_ABSOLUTE_THRESHOLD:
+                  print(f"ALERT: 7d MAE {mae_7d:.4f} exceeds threshold ({MAE_ABSOLUTE_THRESHOLD})")
+                  degraded = True
+
+              if not degraded:
+                  print("Live performance is within acceptable thresholds.")
+          except Exception as e:
+              print(f"Could not read performance report: {e} — skipping live check")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"performance_degraded={str(degraded).lower()}\n")
           EOF
 
   # ---------------------------------------------------------------
@@ -76,7 +119,8 @@ jobs:
     needs: monitor
     if: >
       github.event.inputs.force_retrain == 'true' ||
-      needs.monitor.outputs.drift_detected == 'true'
+      needs.monitor.outputs.drift_detected == 'true' ||
+      needs.monitor.outputs.performance_degraded == 'true'
     env:
       PYTHONPATH: Model-Pipeline/src
       MLFLOW_TRACKING_URI: mlruns
