@@ -1,9 +1,9 @@
 name: BlueForecast — Monitor & Retrain
 
-# Manual only — run when you have new training data and want to retrain.
-# Auto-retrain disabled: current drift is calendar-driven (year/month features),
-# not model degradation. MAE improved 30% — model is performing well.
 on:
+  schedule:
+    # Run drift check every Sunday at 02:00 UTC; retrain automatically if drift detected
+    - cron: '0 2 * * 0'
   workflow_dispatch:
     inputs:
       force_retrain:
@@ -107,8 +107,17 @@ jobs:
       - name: Run retrain + promote pipeline
         run: |
           echo "=== Starting retraining pipeline ==="
-          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Reason: ${{ github.event.inputs.reason || 'scheduled-drift-detected' }}"
           python3 deployment-pipeline/monitoring/retrain_and_promote.py
+
+      - name: Export promoted model to ONNX (edge deployment)
+        if: success()
+        run: |
+          echo "=== Exporting promoted model to ONNX ==="
+          pip install onnxmltools onnxruntime xgboost --quiet
+          python deployment-pipeline/edge-deployment/export_to_onnx.py \
+            --model-path deployment-pipeline/edge-deployment/model/model.ubj
+          echo "ONNX export complete."
 
       - name: Refresh Cloud Run serving revision
         if: success()

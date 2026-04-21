@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(cp -r /Users/alaskatengli/Documents/MLops_Project_Local/bluebikes-demand-predictor/edge-deployment /Users/alaskatengli/Documents/MLops_Project_Local/bluebikes-demand-predictor/deployment-pipeline/edge-deployment)",
-      "Bash(cp /Users/alaskatengli/Documents/MLops_Project_Local/bluebikes-demand-predictor/.github/workflows/*.yml /Users/alaskatengli/Documents/MLops_Project_Local/bluebikes-demand-predictor/deployment-pipeline/ci-cd/)"
+      "Bash(cp /Users/alaskatengli/Documents/MLops_Project_Local/bluebikes-demand-predictor/.github/workflows/*.yml /Users/alaskatengli/Documents/MLops_Project_Local/bluebikes-demand-predictor/deployment-pipeline/ci-cd/)",
+      "Bash(git -C /Users/alaskatengli/Documents/MLops_Project_Local/bluebikes-demand-predictor status)"
     ]
   }
 }
