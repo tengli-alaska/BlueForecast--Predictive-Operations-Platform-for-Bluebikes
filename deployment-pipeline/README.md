@@ -1001,3 +1001,4 @@ Full config: [`monitoring/thresholds.yaml`](monitoring/thresholds.yaml)
 | Schedule | `monitoring_cron` | `0 */6 * * *` | Monitoring check every 6 hours |
 | Schedule | `drift_lookback_days` | 7 | Days of history used for drift evaluation |
 
+
