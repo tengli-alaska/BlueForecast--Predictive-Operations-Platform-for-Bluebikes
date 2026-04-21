@@ -80,8 +80,8 @@ jobs:
     env:
       PYTHONPATH: Model-Pipeline/src
       MLFLOW_TRACKING_URI: mlruns
-      GCS_BUCKET: ${{ env.GCS_BUCKET }}
-      GOOGLE_CLOUD_PROJECT: ${{ env.PROJECT_ID }}
+      GCS_BUCKET: "bluebikes-demand-predictor-data"
+      GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
       RETRAIN_REASON: ${{ github.event.inputs.reason }}
       FORCE_PROMOTE: ${{ github.event.inputs.force_retrain }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
