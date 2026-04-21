@@ -1000,3 +1000,4 @@ Full config: [`monitoring/thresholds.yaml`](monitoring/thresholds.yaml)
 | Retraining | `promotion_threshold` | 0.02 | New model must improve RMSE by > 2% to be promoted |
 | Schedule | `monitoring_cron` | `0 */6 * * *` | Monitoring check every 6 hours |
 | Schedule | `drift_lookback_days` | 7 | Days of history used for drift evaluation |
+
