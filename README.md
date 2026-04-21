@@ -231,8 +231,8 @@ bluebikes-demand-predictor/
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/tengli-alaska/BlueForecast--Predictive-Operations-Platform-for-Bluebikes.git
-cd BlueForecast--Predictive-Operations-Platform-for-Bluebikes
+git clone https://github.com/tengli-alaska/bluebikes-demand-predictor.git
+cd bluebikes-demand-predictor
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt

@@ -451,7 +451,7 @@ docker compose -f Model-Pipeline/docker-compose.yaml build --no-cache
 # Verifies Airflow + MLflow images build cleanly
 ```
 
-**Job 3 — `train`** (manual dispatch, `run_training=true` only):
+**Job 3 — `train`** (weekly cron Mon 03:00 UTC, or manual dispatch with `run_training=true`):
 ```bash
 QUICK_CHECK=True RUN_OPTUNA=<input> python train.py   # 5% sample
 python evaluate.py                                     # test set gate
@@ -487,7 +487,7 @@ GitHub → Actions → "BlueForecast — Refresh Predictions" → Run workflow
 
 ### `monitor_and_retrain.yml` — Drift Check & Retraining
 
-Manual-only workflow with two sequential jobs:
+Runs automatically every Sunday at 02:00 UTC, and can also be manually dispatched. Two sequential jobs:
 
 **Job 1 — `monitor`**: Loads the approved model metadata and drift report from GCS, prints a full health summary, and sets a `drift_detected` output flag.
 
@@ -664,7 +664,7 @@ gcloud --version
 ### Step 2 — Clone the Repository
 
 ```bash
-git clone https://github.com/<org>/bluebikes-demand-predictor.git
+git clone https://github.com/tengli-alaska/bluebikes-demand-predictor.git
 cd bluebikes-demand-predictor
 ```
 
@@ -733,7 +733,11 @@ export REPO="blueforecast"
 export API_SERVICE="blueforecast-api"
 export DASHBOARD_SERVICE="blueforecast-dashboard"
 export IMAGE_TAG="latest"
+export GCS_BUCKET="bluebikes-demand-predictor-data"
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/sa-key.json"
 ```
+
+> `API_URL` and `DASHBOARD_URL` are populated after first deploy (Step 10). Leave them blank for now.
 
 ### Step 7 — Install Python Dependencies
 
