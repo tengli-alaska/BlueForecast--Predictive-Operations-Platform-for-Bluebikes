@@ -1,4 +1,4 @@
-# BlueForecast
+﻿# BlueForecast
 
 **Predictive Operations Platform for Bluebikes**
 
@@ -354,7 +354,7 @@ The data pipeline produces a feature matrix at `processed/features/feature_matri
 
 ## Deployment
 
-The full deployment pipeline (Cloud Run, edge inference, CI/CD, monitoring) is documented in [`deployment-pipeline/README.md`](deployment-pipeline/README.md).
+The full deployment pipeline (Cloud Run, edge inference, CI/CD, monitoring) is documented in [`deployment/README.md`](deployment/README.md).
 
 ### Quick summary
 
@@ -397,7 +397,7 @@ schedule:
 
 ```bash
 # 1. Set up GCP service account and GitHub secrets (one-time)
-#    See deployment-pipeline/README.md Section 10 for full commands
+#    See deployment/README.md Section 10 for full commands
 
 # 2. Push to main — dashboard deploys automatically via GitHub Actions
 
@@ -407,7 +407,7 @@ curl "$(gcloud run services describe blueforecast-api \
   --region=us-east1 --format='value(status.url)')/api/health"
 ```
 
-For complete step-by-step instructions including GCP setup, secrets configuration, edge deployment, and validation, see **[deployment-pipeline/README.md → Section 10](deployment-pipeline/README.md#10-step-by-step-replication-guide-fresh-environment)**.
+For complete step-by-step instructions including GCP setup, secrets configuration, edge deployment, and validation, see **[deployment/README.md → Section 10](deployment/README.md#10-step-by-step-replication-guide-fresh-environment)**.
 
 ---
 
@@ -424,10 +424,10 @@ To replicate the full project on a new machine:
 6. Use `dvc pull` to fetch data from GCS, or `dvc repro` to regenerate
 
 ### Model training
-See [`Model-Pipeline/README.md`](Model-Pipeline/README.md) for training, evaluation, and HPO steps.
+See [`model_pipeline/README.md`](model_pipeline/README.md) for training, evaluation, and HPO steps.
 
 ### Deployment
-See [`deployment-pipeline/README.md`](deployment-pipeline/README.md) for cloud deployment, edge inference, CI/CD, and monitoring replication.
+See [`deployment/README.md`](deployment/README.md) for cloud deployment, edge inference, CI/CD, and monitoring replication.
 
 All code, configuration, and pipeline definitions are version-controlled. Data is versioned separately via DVC with GCS remote.
 
