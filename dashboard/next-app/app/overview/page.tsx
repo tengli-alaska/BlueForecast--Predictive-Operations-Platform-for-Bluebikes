@@ -2,497 +2,334 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, Truck, Clock, TrendingUp, CheckCircle2, TrendingDown } from "lucide-react";
+import { ArrowRight, Activity, Shield, GitBranch, Bike, TrendingUp, Clock } from "lucide-react";
+import { useRouter } from "next/navigation";
 import AnimatedCounter from "@/components/shared/AnimatedCounter";
-import StatusBadge from "@/components/shared/StatusBadge";
+import DataBadge from "@/components/shared/DataBadge";
+import Tooltip from "@/components/shared/Tooltip";
 import {
   getLatestMetrics,
   getBiasReport,
   getDriftReport,
-  getStations,
-  getPredictions,
   getPredictionsNetwork,
-  getStationMapping,
+  getStationStatuses,
 } from "@/data";
-import { formatDate, deriveStationStatuses } from "@/lib/utils";
-import DataBadge from "@/components/shared/DataBadge";
-import type { ModelMetrics, BiasReport, DriftReport, Station, Prediction, StationStatus } from "@/types";
+import { formatDate } from "@/lib/utils";
+import type { ModelMetrics, BiasReport, DriftReport, StationStatus } from "@/types";
 
 const fade = {
-  hidden: { opacity: 0, y: 8 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.05, duration: 0.3 },
-  }),
+  hidden: { opacity: 0, y: 10 },
+  visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.07, duration: 0.35, ease: "easeOut" } }),
 };
-
-type TimeFilter = "today" | "yesterday" | "lastweek";
 
 interface OverviewData {
   latest: ModelMetrics;
   biasReport: BiasReport;
   driftReport: DriftReport;
-  stations: Station[];
-  predictions: Prediction[];
   stationStatuses: StationStatus[];
   hourlyDemand: { hour: number; total: number }[];
-  topStations: { name: string; total: number; risk: StationStatus["risk_level"] }[];
-  metricsLive: boolean;
-  stationsLive: boolean;
-  predictionsLive: boolean;
+  isLive: boolean;
 }
 
-/** Derive a comparison period's hourly demand from today's data using realistic scaling. */
-function buildComparisonDemand(
-  today: { hour: number; total: number }[],
-  period: "yesterday" | "lastweek"
-): { hour: number; total: number }[] {
-  // Yesterday: roughly 18% lower (cooler April day), last week: 32% lower (early spring)
-  const baseScale = period === "yesterday" ? 0.82 : 0.68;
-  return today.map(({ hour, total }) => {
-    // Slight hour-specific variation using a deterministic offset
-    const jitter = 1 + ((hour * 13 + (period === "lastweek" ? 7 : 3)) % 11 - 5) * 0.02;
-    return { hour, total: Math.round(total * baseScale * jitter) };
-  });
+function nextPeakLabel(): string {
+  const h = new Date().getHours();
+  if (h < 7)  return "8 am rush";
+  if (h < 15) return "5 pm rush";
+  if (h < 20) return "tomorrow's 8 am";
+  return "tomorrow's 8 am";
 }
-
-function Delta({ today, compare, unit = "" }: { today: number; compare: number; unit?: string }) {
-  if (compare === 0) return null;
-  const diff = today - compare;
-  const pct = Math.round((diff / compare) * 100);
-  const up = diff > 0;
-  return (
-    <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${up ? "text-emerald-400" : "text-red-400"}`}>
-      {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-      {up ? "+" : ""}{pct}%{unit}
-    </span>
-  );
-}
-
-const FILTER_LABELS: Record<TimeFilter, string> = {
-  today: "Today",
-  yesterday: "vs Yesterday",
-  lastweek: "vs Last Week",
-};
 
 export default function OverviewPage() {
-  const [data, setData] = useState<OverviewData | null>(null);
+  const [data, setData]     = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>("today");
+  const router = useRouter();
 
   useEffect(() => {
     Promise.all([
       getLatestMetrics(),
       getBiasReport(),
       getDriftReport(),
-      getStations(),
-      getPredictions(),
-      getStationMapping(),
       getPredictionsNetwork(),
-    ]).then(([latestResult, biasReport, driftReport, stationsResult, predictionsResult, mapping, networkResult]) => {
-      const stations = stationsResult.data;
-      const predictions = predictionsResult.data;
-
-      const a32ToGbfs: Record<string, string> = {};
-      const a32ToName: Record<string, string> = {};
-      for (const row of mapping) {
-        if (row.gbfs_station_id) a32ToGbfs[row.start_station_id] = row.gbfs_station_id;
-        if (row.station_name) a32ToName[row.start_station_id] = row.station_name;
-      }
-
-      const translatedPredictions: Prediction[] = predictions.map((p) => ({
-        ...p,
-        station_id: a32ToGbfs[p.station_id] ?? p.station_id,
-      }));
-
-      const stationStatuses = deriveStationStatuses(stations, translatedPredictions);
-
-      const nameById: Record<string, string> = {};
-      for (const s of stations) nameById[s.station_id] = s.station_name;
-
-      const hourlyDemand = networkResult.data;
-
-      const stationTotals: Record<string, number> = {};
-      for (const p of predictions) {
-        stationTotals[p.station_id] = (stationTotals[p.station_id] ?? 0) + p.predicted_demand;
-      }
-      const riskByGbfs: Record<string, StationStatus["risk_level"]> = {};
-      for (const s of stationStatuses) riskByGbfs[s.station_id] = s.risk_level;
-
-      const topStations = Object.entries(stationTotals)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 8)
-        .map(([sid, total], rank) => {
-          const gbfsId = a32ToGbfs[sid] ?? sid;
-          const resolvedName = nameById[gbfsId] ?? a32ToName[sid];
-          const name = resolvedName ?? `High-Demand Station #${rank + 1}`;
-          return { name, total: Math.round(total), risk: riskByGbfs[gbfsId] ?? "moderate" as StationStatus["risk_level"] };
-        });
-
-      setData({
-        latest: latestResult.data,
-        biasReport,
-        driftReport,
-        stations,
-        predictions,
-        stationStatuses,
-        hourlyDemand,
-        topStations,
-        metricsLive: latestResult.isLive,
-        stationsLive: stationsResult.isLive,
-        predictionsLive: predictionsResult.isLive || networkResult.isLive,
-      });
+      getStationStatuses(),
+    ]).then(([latestResult, biasReport, driftReport, networkResult, stationStatuses]) => {
+      setData({ latest: latestResult.data, biasReport, driftReport,
+        stationStatuses, hourlyDemand: networkResult.data, isLive: latestResult.isLive });
     }).finally(() => setLoading(false));
   }, []);
 
-  if (loading || !data) {
-    return (
-      <div className="p-5 md:p-7 flex items-center justify-center min-h-[50vh]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-6 w-6 rounded-full border-2 border-blue-400/30 border-t-blue-400 animate-spin" />
-          <p className="text-sm text-slate-500">Loading data...</p>
-        </div>
+  if (loading || !data) return (
+    <div className="p-5 md:p-7 flex items-center justify-center min-h-[50vh]">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-6 w-6 rounded-full border-2 border-blue-400/30 border-t-blue-400 animate-spin" />
+        <p className="text-xs text-slate-500">Loading network snapshot…</p>
       </div>
-    );
-  }
+    </div>
+  );
 
-  const { latest, biasReport, driftReport, stations, stationStatuses, hourlyDemand, topStations, metricsLive, stationsLive, predictionsLive } = data;
+  const { latest, biasReport, driftReport, stationStatuses, hourlyDemand, isLive } = data;
 
-  const criticalCount = stationStatuses.filter((s) => s.risk_level === "critical").length;
-  const avgFill = Math.round(stationStatuses.reduce((a, b) => a + b.fill_pct, 0) / (stationStatuses.length || 1));
+  const healthy    = stationStatuses.filter(s => s.risk_level === "moderate" || s.risk_level === "surplus");
+  const low        = stationStatuses.filter(s => s.risk_level === "low");
+  const critical   = stationStatuses.filter(s => s.risk_level === "critical");
+  const needBikes  = critical.filter(s => s.fill_pct <= 10);
+  const overflow   = critical.filter(s => s.fill_pct >= 90);
+  const total      = stationStatuses.length;
+  const healthPct  = Math.round((healthy.length / total) * 100);
+  const avgFill    = Math.round(stationStatuses.reduce((a, b) => a + b.fill_pct, 0) / (total || 1));
   const totalDemand = hourlyDemand.reduce((s, h) => s + h.total, 0);
-  const biasFlags = biasReport.slices.flatMap((s) => s.flags);
-  const maxHourlyDemand = Math.max(...hourlyDemand.map((h) => h.total), 1);
-  const dataIsLive = metricsLive && stationsLive && predictionsLive;
+  const biasFlags  = biasReport.slices.flatMap(s => s.flags);
+  const hour       = new Date().getHours();
+  const greeting   = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  // Comparison period data
-  const compPeriod = timeFilter !== "today" ? timeFilter : null;
-  const compHourly = compPeriod ? buildComparisonDemand(hourlyDemand, compPeriod) : null;
-  const compMaxHourly = compHourly ? Math.max(...compHourly.map((h) => h.total), 1) : 1;
-  const overallMax = compHourly ? Math.max(maxHourlyDemand, compMaxHourly) : maxHourlyDemand;
+  // Demand chart
+  const CHART_H  = 72;
+  const overallMax = Math.max(...hourlyDemand.map(h => h.total), 1);
 
-  // Derived comparison KPIs (scale from today's live values for realistic deltas)
-  const compScale = compPeriod === "yesterday" ? 0.82 : 0.68;
-  const compCritical = compHourly ? Math.round(criticalCount / compScale) : 0;
-  const compAvgFill = compHourly ? Math.round(avgFill / compScale) : 0;
-  const compTotalDemand = compHourly ? Math.round(totalDemand * compScale) : 0;
-
-  function riskBadge(level: StationStatus["risk_level"]): "error" | "warning" | "success" | "running" {
-    if (level === "critical") return "error";
-    if (level === "low") return "warning";
-    if (level === "surplus") return "running";
-    return "success";
-  }
-
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
+  // Attention items — only real problems, ordered by severity
+  const attention: { dot: string; label: string; sub: string; href: string; urgent?: boolean }[] = [];
+  if (needBikes.length > 0)
+    attention.push({ dot: "bg-red-400", label: `${needBikes.length} station${needBikes.length > 1 ? "s" : ""} nearly empty`, sub: `Needs bikes before ${nextPeakLabel()}`, href: "/rebalancing", urgent: true });
+  if (overflow.length > 0)
+    attention.push({ dot: "bg-amber-400", label: `${overflow.length} station${overflow.length > 1 ? "s" : ""} overflowing`, sub: "Schedule a pickup — riders being turned away", href: "/rebalancing" });
+  if (low.length > 0)
+    attention.push({ dot: "bg-amber-400/70", label: `${low.length} stations trending low`, sub: "Monitor — will need bikes within 3–4 h", href: "/forecasts" });
+  if (driftReport.overall_drift_detected)
+    attention.push({ dot: "bg-blue-400", label: "Model drift detected", sub: `${driftReport.feature_drift.drifted_features.length} features shifted — review accuracy`, href: "/drift" });
 
   return (
-    <div className="p-5 md:p-7 space-y-5">
-      {/* Header */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start justify-between gap-4">
+    <div className="p-5 md:p-8 space-y-5 max-w-4xl">
+
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-[22px] font-semibold text-white tracking-tight">{greeting}</h1>
-            <DataBadge isLive={dataIsLive} />
-          </div>
-          <p className="text-[13px] text-slate-500">
-            {stations.length} stations monitored · Model v{latest.run_id?.slice(0, 4) ?? "—"} · Forecasts updated {formatDate(latest.trained_at)}
+          <h1 className="text-[22px] font-semibold text-white tracking-tight">{greeting}</h1>
+          <p className="text-[12px] text-slate-500 mt-0.5 flex items-center gap-2">
+            {total} stations monitored · updated {formatDate(latest.trained_at)}
+            <DataBadge isLive={isLive} inline />
           </p>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Time filter pills */}
-          <div className="flex items-center rounded-lg bg-white/[0.04] border border-white/[0.06] p-0.5 gap-0.5">
-            {(["today", "yesterday", "lastweek"] as TimeFilter[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setTimeFilter(f)}
-                className={`px-3 py-1.5 rounded-md text-[11px] font-medium transition-all duration-150 ${
-                  timeFilter === f
-                    ? "bg-blue-500/20 text-blue-300 shadow-sm"
-                    : "text-slate-500 hover:text-slate-300"
-                }`}
-              >
-                {FILTER_LABELS[f]}
-              </button>
-            ))}
-          </div>
-
-          {biasFlags.length > 0 && (
-            <div className="flex items-center gap-1.5 text-amber-400/80 text-xs">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              <span>{biasFlags.length} bias flags</span>
-            </div>
-          )}
         </div>
       </motion.div>
 
-      {/* Comparison context banner */}
-      {compPeriod && (
-        <motion.div
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-2 rounded-lg bg-blue-500/[0.06] border border-blue-500/10 px-3 py-2 text-[11px] text-blue-300/70"
-        >
-          <TrendingUp className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-          Showing today's forecast compared to <span className="font-medium text-blue-300 ml-1">{compPeriod === "yesterday" ? "yesterday" : "same day last week"}</span>.
-          <span className="ml-1 text-slate-500">Comparison values are model-estimated from historical demand patterns.</span>
-        </motion.div>
-      )}
+      {/* ── Network health hero ─────────────────────────────────── */}
+      <motion.div custom={0} variants={fade} initial="hidden" animate="visible"
+        className="rounded-2xl bg-gradient-to-br from-slate-800/60 to-slate-900/80 border border-white/[0.07] p-5">
+        <div className="flex items-start justify-between gap-6">
 
-      {/* Bento Grid */}
-      <div className="grid grid-cols-12 gap-3">
+          {/* Left — the headline number */}
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-1">Network health</p>
+            <div className="flex items-end gap-2">
+              <span className="text-[48px] font-bold leading-none tracking-tight text-white">
+                <AnimatedCounter value={healthPct} decimals={0} suffix="%" />
+              </span>
+              <span className="text-slate-400 text-sm mb-2">of stations healthy</span>
+            </div>
+            <p className="text-[12px] text-emerald-400/80 mt-1 font-medium">
+              {healthy.length} stations serving riders well right now
+            </p>
+          </div>
 
-        {/* KPI — High-Risk Stations */}
-        <motion.div custom={0} variants={fade} initial="hidden" animate="visible" className="col-span-4 rounded-xl bg-bg-card p-4">
-          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">High-Risk Stations</p>
-          <div className="flex items-end gap-2 mt-1">
-            <p className="text-2xl font-semibold text-white tracking-tight">
-              <AnimatedCounter value={criticalCount} decimals={0} />
-              <span className="text-sm text-slate-500 font-normal ml-1">/ {stationStatuses.length}</span>
-            </p>
-            {compHourly && <Delta today={criticalCount} compare={compCritical} />}
-          </div>
-          {compHourly && (
-            <p className="text-[10px] text-slate-600 mt-1">
-              {compPeriod === "yesterday" ? "Yesterday" : "Last week"}: {compCritical} critical
-            </p>
-          )}
-          <div className="flex items-center gap-1 mt-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-red-400/80" />
-            <span className="text-[11px] text-slate-500">
-              {criticalCount === 0 ? "All stations within normal demand" : "Demand-predicted — see Rebalancing"}
-            </span>
-          </div>
-        </motion.div>
-
-        {/* KPI — Avg Demand Load */}
-        <motion.div custom={1} variants={fade} initial="hidden" animate="visible" className="col-span-4 rounded-xl bg-bg-card p-4">
-          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Avg Predicted Demand Load</p>
-          <div className="flex items-end gap-2 mt-1">
-            <p className="text-2xl font-semibold text-white tracking-tight">
-              <AnimatedCounter value={avgFill} decimals={0} suffix="%" />
-            </p>
-            {compHourly && <Delta today={avgFill} compare={compAvgFill} />}
-          </div>
-          {compHourly && (
-            <p className="text-[10px] text-slate-600 mt-0.5">
-              {compPeriod === "yesterday" ? "Yesterday" : "Last week"}: {compAvgFill}%
-            </p>
-          )}
-          <div className="mt-2.5 h-1 w-full rounded-full bg-bg-tertiary relative overflow-hidden">
-            {compHourly && (
-              <div
-                className="absolute h-full rounded-full bg-slate-500/30"
-                style={{ width: `${compAvgFill}%` }}
-              />
-            )}
-            <motion.div
-              className="absolute h-full rounded-full bg-blue-400/60"
-              initial={{ width: 0 }}
-              animate={{ width: `${avgFill}%` }}
-              transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
-            />
-          </div>
-        </motion.div>
-
-        {/* KPI — Total Network Demand */}
-        <motion.div custom={2} variants={fade} initial="hidden" animate="visible" className="col-span-4 rounded-xl bg-bg-card p-4">
-          <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Total Network Demand</p>
-          <div className="flex items-end gap-2 mt-1">
-            <p className="text-2xl font-semibold text-white tracking-tight">
-              <AnimatedCounter value={totalDemand} decimals={0} />
-              <span className="text-sm text-slate-500 font-normal ml-1">trips/24h</span>
-            </p>
-            {compHourly && <Delta today={totalDemand} compare={compTotalDemand} />}
-          </div>
-          {compHourly && (
-            <p className="text-[10px] text-slate-600 mt-0.5">
-              {compPeriod === "yesterday" ? "Yesterday" : "Last week"}: {compTotalDemand.toLocaleString()} trips
-            </p>
-          )}
-          <div className="flex items-center gap-1 mt-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-400/80" />
-            <span className="text-[11px] text-slate-500">Across all {stations.length} stations</span>
-          </div>
-        </motion.div>
-
-        {/* Top stations + Ops actions */}
-        <motion.div custom={4} variants={fade} initial="hidden" animate="visible" className="col-span-8 rounded-xl bg-bg-card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-[13px] font-medium text-white">Top Stations — Predicted Demand Today</p>
-            <DataBadge isLive={predictionsLive} />
-          </div>
-          <div className="space-y-1.5">
-            {topStations.map((s) => (
-              <div key={s.name} className="flex items-center gap-3">
-                <span className="text-[11px] text-slate-400 truncate w-48">{s.name}</span>
-                <div className="flex-1 h-[5px] rounded-full bg-white/[0.06] overflow-hidden">
-                  <motion.div
-                    className="h-full rounded-full bg-blue-400/50"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, (s.total / (topStations[0]?.total || 1)) * 100)}%` }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                  />
-                </div>
-                <span className="text-[11px] text-slate-400 tabular-nums w-16 text-right">{s.total} trips</span>
-                <StatusBadge status={riskBadge(s.risk)} label={s.risk.charAt(0).toUpperCase() + s.risk.slice(1)} />
+          {/* Right — station breakdown dots */}
+          <div className="text-right space-y-1.5 shrink-0">
+            {[
+              { count: healthy.length,  label: "Healthy",    dot: "bg-emerald-400" },
+              { count: low.length,      label: "Trending low", dot: "bg-amber-400" },
+              { count: critical.length, label: "Critical",   dot: "bg-red-400" },
+            ].map(({ count, label, dot }) => (
+              <div key={label} className="flex items-center justify-end gap-2">
+                <span className="text-[12px] text-slate-400">{count} {label}</span>
+                <span className={`h-2 w-2 rounded-full ${dot}`} />
               </div>
             ))}
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div custom={5} variants={fade} initial="hidden" animate="visible" className="col-span-4 rounded-xl bg-bg-card p-4 space-y-3">
-          <p className="text-[13px] font-medium text-white">Ops Actions</p>
-          {criticalCount > 0 ? (
-            <>
-              <div className="flex items-start gap-2 rounded-lg bg-red-500/[0.08] border border-red-500/20 px-3 py-2">
-                <Truck className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-red-300 leading-relaxed">
-                  <span className="font-semibold">{criticalCount} station{criticalCount > 1 ? "s" : ""} need bikes</span> — dispatch before next rush hour
-                </p>
+        {/* Station fill stacked bar */}
+        <div className="mt-4">
+          <div className="flex h-2 rounded-full overflow-hidden gap-[2px]">
+            <motion.div className="bg-emerald-500/60 rounded-l-full"
+              initial={{ width: 0 }} animate={{ width: `${(healthy.length / total) * 100}%` }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }} />
+            <motion.div className="bg-amber-400/60"
+              initial={{ width: 0 }} animate={{ width: `${(low.length / total) * 100}%` }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: 0.3 }} />
+            <motion.div className="bg-red-400/60 rounded-r-full"
+              initial={{ width: 0 }} animate={{ width: `${(critical.length / total) * 100}%` }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: 0.4 }} />
+          </div>
+          <div className="flex justify-between mt-1.5 text-[10px] text-slate-600">
+            <span>Healthy</span><span>Low</span><span>Critical</span>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ── KPI strip ──────────────────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          {
+            icon: <TrendingUp className="h-4 w-4 text-blue-400" />,
+            label: "Predicted trips today",
+            value: totalDemand,
+            suffix: "",
+            sub: "across all stations · 24 h",
+            tip: "Sum of model-predicted pickups across all stations over the next 24 hours.",
+            color: "text-white",
+            i: 1,
+          },
+          {
+            icon: <Bike className="h-4 w-4 text-slate-400" />,
+            label: "Avg network fill",
+            value: avgFill,
+            suffix: "%",
+            sub: avgFill < 30 ? "Network running low" : avgFill > 80 ? "Network filling up" : "Healthy range (20–80%)",
+            tip: "Average dock occupancy across all monitored stations. Healthy range: 20–80%. Below 15% or above 90% triggers action.",
+            color: avgFill < 20 || avgFill > 85 ? "text-amber-300" : "text-white",
+            i: 2,
+          },
+          {
+            icon: <Clock className="h-4 w-4 text-slate-400" />,
+            label: "Next peak window",
+            value: hour < 9 ? (9 - hour) : hour < 17 ? (17 - hour) : (24 - hour + 8),
+            suffix: " h away",
+            sub: hour < 9 ? "AM commute rush" : hour < 17 ? "PM commute rush" : "Tomorrow AM rush",
+            tip: "Time until the next high-demand window (7–9 am or 4–7 pm). Plan truck routes to arrive 30–45 min before peak.",
+            color: "text-white",
+            i: 3,
+          },
+        ].map(({ icon, label, value, suffix, sub, tip, color, i }) => (
+          <motion.div key={label} custom={i} variants={fade} initial="hidden" animate="visible"
+            className="rounded-xl bg-bg-card border border-white/[0.05] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{label}</p>
+                <Tooltip content={tip} />
               </div>
-              <div className="flex items-start gap-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/15 px-3 py-2">
-                <Clock className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
-                <p className="text-[11px] text-amber-300/80 leading-relaxed">
-                  Check Rebalancing page for priority routes
-                </p>
-              </div>
-            </>
-          ) : (
-            <div className="flex items-start gap-2 rounded-lg bg-emerald-500/[0.06] border border-emerald-500/15 px-3 py-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mt-0.5 shrink-0" />
-              <p className="text-[11px] text-emerald-300/80 leading-relaxed">
-                All monitored stations within normal demand range — no dispatch needed
-              </p>
+              {icon}
             </div>
-          )}
-          <div className="flex items-start gap-2 rounded-lg bg-blue-500/[0.06] border border-blue-500/10 px-3 py-2">
-            <TrendingUp className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
-            <p className="text-[11px] text-blue-300/70 leading-relaxed">
-              Peak window: <span className="font-medium text-blue-300">7–9am · 4–7pm</span>
+            <p className={`text-[26px] font-bold tracking-tight leading-none ${color}`}>
+              <AnimatedCounter value={value} decimals={0} suffix={suffix} />
             </p>
-          </div>
-        </motion.div>
-
-        {/* 24h Chart with comparison overlay */}
-        <motion.div custom={6} variants={fade} initial="hidden" animate="visible" className="col-span-12 rounded-xl bg-[#0f1520] p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-[13px] font-medium text-white">24-Hour Network Demand Forecast</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Total predicted trips across all {stations.length} stations, by hour
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {compHourly && (
-                <div className="flex items-center gap-3 text-[10px]">
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-sm bg-blue-400/70 inline-block" />
-                    <span className="text-slate-400">Today</span>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-sm bg-slate-500/50 inline-block" />
-                    <span className="text-slate-500">{compPeriod === "yesterday" ? "Yesterday" : "Last week"}</span>
-                  </span>
-                </div>
-              )}
-              <DataBadge isLive={predictionsLive} />
-            </div>
-          </div>
-
-          <div className="flex items-end gap-[3px] h-24">
-            {hourlyDemand.map(({ hour: h, total }) => {
-              const compTotal = compHourly?.find((c) => c.hour === h)?.total ?? 0;
-              const todayPct = overallMax > 0 ? (total / overallMax) * 100 : 0;
-              const compPct = overallMax > 0 ? (compTotal / overallMax) * 100 : 0;
-              const isRush = (h >= 7 && h <= 9) || (h >= 16 && h <= 19);
-
-              return (
-                <div key={h} className="flex-1 flex flex-col items-center gap-0.5 group relative">
-                  {/* Hover tooltip */}
-                  <div className="absolute -top-10 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col items-center z-10 pointer-events-none">
-                    <div className="text-[9px] text-white bg-slate-800 border border-white/10 rounded px-2 py-1 whitespace-nowrap space-y-0.5">
-                      <div>{h === 0 ? "12am" : h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`}: <span className="text-blue-300">{total}</span></div>
-                      {compHourly && <div className="text-slate-400">{compPeriod === "yesterday" ? "Yest" : "Wk ago"}: {compTotal}</div>}
-                    </div>
-                  </div>
-
-                  <div className="w-full flex items-end gap-[1px] h-full">
-                    {/* Comparison bar (behind) */}
-                    {compHourly && (
-                      <motion.div
-                        className="flex-1 rounded-sm bg-slate-500/30"
-                        initial={{ height: 0 }}
-                        animate={{ height: `${compPct}%` }}
-                        transition={{ duration: 0.5, delay: h * 0.015, ease: "easeOut" }}
-                        style={{ minHeight: compTotal > 0 ? 2 : 0 }}
-                      />
-                    )}
-                    {/* Today bar */}
-                    <motion.div
-                      className={`flex-1 rounded-sm ${isRush ? "bg-blue-400/70" : "bg-slate-600/50"}`}
-                      initial={{ height: 0 }}
-                      animate={{ height: `${todayPct}%` }}
-                      transition={{ duration: 0.6, delay: h * 0.02, ease: "easeOut" }}
-                      style={{ minHeight: total > 0 ? 2 : 0 }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex justify-between mt-2 text-[9px] text-slate-600">
-            <span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span>
-          </div>
-          <p className="text-[10px] text-slate-600 mt-1">Highlighted bars = rush hours (7–9am, 4–7pm)</p>
-        </motion.div>
-
-        {/* Status tiles */}
-        <motion.div custom={7} variants={fade} initial="hidden" animate="visible" className="col-span-4 rounded-xl bg-bg-card p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-[12px] text-slate-400">Forecast Reliability</p>
-            <span className={`text-[11px] font-medium ${latest.validation_status === "PASSED" ? "text-emerald-400/70" : "text-red-400/70"}`}>
-              {latest.validation_status === "PASSED" ? "Trusted" : "Review Needed"}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
-            Predictions off by ±{latest.test_rmse.toFixed(1)} bikes/hr on average — sufficient for dispatch decisions
-          </p>
-        </motion.div>
-
-        <motion.div custom={8} variants={fade} initial="hidden" animate="visible" className="col-span-4 rounded-xl bg-bg-card p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-[12px] text-slate-400">Prediction Engine</p>
-            <span className={`text-[11px] font-medium ${driftReport.overall_drift_detected ? "text-amber-400/70" : "text-emerald-400/70"}`}>
-              {driftReport.overall_drift_detected ? "Seasonal Shift" : "On Track"}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
-            {driftReport.overall_drift_detected
-              ? "Seasonal patterns shifted (expected Apr vs Dec). Accuracy improved 30% — no action needed"
-              : "Model is tracking current ridership patterns accurately"}
-          </p>
-        </motion.div>
-
-        <motion.div custom={9} variants={fade} initial="hidden" animate="visible" className="col-span-4 rounded-xl bg-bg-card p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-[12px] text-slate-400">Coverage Equity</p>
-            <span className={`text-[11px] font-medium ${biasFlags.length > 0 ? "text-amber-400/70" : "text-emerald-400/70"}`}>
-              {biasFlags.length > 0 ? "Monitor" : "Equitable"}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
-            {biasFlags.length > 0
-              ? "Low-volume stations have wider error margins — factor in extra buffer when stocking"
-              : "Forecast accuracy is consistent across all neighborhoods and station types"}
-          </p>
-        </motion.div>
-
+            <p className="text-[11px] text-slate-600 mt-1.5">{sub}</p>
+          </motion.div>
+        ))}
       </div>
+
+      {/* ── Attention items ─────────────────────────────────────── */}
+      {attention.length > 0 && (
+        <motion.div custom={4} variants={fade} initial="hidden" animate="visible">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">Needs attention</p>
+          <div className="rounded-xl bg-bg-card border border-white/[0.05] divide-y divide-white/[0.04] overflow-hidden">
+            {attention.map((a, idx) => (
+              <button key={idx} onClick={() => router.push(a.href)}
+                className="w-full flex items-center gap-4 px-4 py-3.5 text-left hover:bg-white/[0.03] transition-colors group">
+                <span className={`h-2 w-2 rounded-full shrink-0 ${a.dot} ${a.urgent ? "ring-2 ring-red-400/20" : ""}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-slate-200">{a.label}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{a.sub}</p>
+                </div>
+                <ArrowRight className="h-3.5 w-3.5 text-slate-600 group-hover:text-slate-400 transition-colors shrink-0" />
+              </button>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* All-clear */}
+      {attention.length === 0 && (
+        <motion.div custom={4} variants={fade} initial="hidden" animate="visible"
+          className="rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15 px-4 py-3 flex items-center gap-3">
+          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          <p className="text-[13px] text-emerald-300 font-medium">All stations healthy — no action needed right now</p>
+        </motion.div>
+      )}
+
+      {/* ── 24 h demand shape ───────────────────────────────────── */}
+      <motion.div custom={5} variants={fade} initial="hidden" animate="visible"
+        className="rounded-xl bg-bg-card border border-white/[0.05] p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-[13px] font-semibold text-white">Demand shape · next 24 h</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Total predicted pickups across network by hour</p>
+          </div>
+          <p className="text-[11px] text-slate-600">blue = rush window</p>
+        </div>
+
+        <div className="relative flex items-end gap-[3px]" style={{ height: CHART_H }}>
+          {hourlyDemand.map(({ hour: h, total }) => {
+            const px     = Math.max(total > 0 ? 3 : 0, Math.round((total / overallMax) * CHART_H));
+            const isRush = (h >= 7 && h <= 9) || (h >= 16 && h <= 19);
+            const label  = h === 0 ? "12 am" : h < 12 ? `${h} am` : h === 12 ? "12 pm" : `${h - 12} pm`;
+            return (
+              <div key={h} className="flex-1 flex items-end group relative" style={{ height: CHART_H }}>
+                {/* Tooltip */}
+                <div className="absolute -top-9 left-1/2 -translate-x-1/2 hidden group-hover:block z-10 pointer-events-none">
+                  <div className="text-[9px] text-white bg-slate-800 border border-white/10 rounded px-2 py-1 whitespace-nowrap">
+                    {label}: <span className="text-blue-300 font-medium">{total}</span>
+                  </div>
+                </div>
+                <motion.div
+                  className={`w-full rounded-t-sm ${isRush ? "bg-blue-400/75" : "bg-slate-600/35"}`}
+                  style={isRush ? { background: "linear-gradient(to top, rgba(59,130,246,0.8), rgba(96,165,250,0.4))" } : {}}
+                  initial={{ height: 0 }}
+                  animate={{ height: px }}
+                  transition={{ duration: 0.5, delay: h * 0.016, ease: "easeOut" }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex justify-between mt-2 text-[9px] text-slate-600">
+          <span>12 am</span><span>6 am</span><span>12 pm</span><span>6 pm</span><span>11 pm</span>
+        </div>
+      </motion.div>
+
+      {/* ── Model health strip ──────────────────────────────────── */}
+      <motion.div custom={6} variants={fade} initial="hidden" animate="visible" className="grid grid-cols-3 gap-3">
+        {[
+          {
+            icon: <Shield className="h-3.5 w-3.5" />,
+            label: "Forecast accuracy",
+            status: latest.validation_status === "PASSED" ? "Trusted" : "Review",
+            ok: latest.validation_status === "PASSED",
+            sub: `±${latest.test_rmse.toFixed(1)} bikes/hr avg error`,
+            tip: `Test RMSE: average prediction error in bikes/hr on held-out data. Threshold: < 2.5. Ours: ${latest.test_rmse.toFixed(4)}.`,
+            href: "/performance",
+          },
+          {
+            icon: <Activity className="h-3.5 w-3.5" />,
+            label: "Model drift",
+            status: driftReport.overall_drift_detected ? "Detected" : "Stable",
+            ok: !driftReport.overall_drift_detected,
+            sub: driftReport.overall_drift_detected ? `${driftReport.feature_drift.drifted_features.length} features shifted` : "Tracking accurately",
+            tip: "Drift is flagged when input distributions shift significantly from training (KL divergence > 0.10) or live MAE rises > 20% above baseline.",
+            href: "/drift",
+          },
+          {
+            icon: <GitBranch className="h-3.5 w-3.5" />,
+            label: "Coverage equity",
+            status: biasFlags.length > 0 ? `${biasFlags.length} flag${biasFlags.length > 1 ? "s" : ""}` : "Equitable",
+            ok: biasFlags.length === 0,
+            sub: biasFlags.length > 0 ? "Low-cap stations: add buffer" : "Consistent across all areas",
+            tip: "Bias flags are raised when demand disparity across station groups (capacity, time-of-day, season) exceeds 5×. Wider error at low-volume stations — add extra stock buffer.",
+            href: "/bias",
+          },
+        ].map(({ icon, label, status, ok, sub, tip, href }) => (
+          <button key={label} onClick={() => router.push(href)}
+            className="rounded-xl bg-bg-card border border-white/[0.05] p-4 text-left hover:bg-white/[0.03] transition-colors group">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5 text-slate-500">
+                {icon}
+                <p className="text-[10px] font-semibold uppercase tracking-widest">{label}</p>
+                <Tooltip content={tip} />
+              </div>
+              <ArrowRight className="h-3 w-3 text-slate-700 group-hover:text-slate-500 transition-colors" />
+            </div>
+            <p className={`text-[14px] font-semibold ${ok ? "text-emerald-400" : "text-amber-400"}`}>{status}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{sub}</p>
+          </button>
+        ))}
+      </motion.div>
+
     </div>
   );
 }

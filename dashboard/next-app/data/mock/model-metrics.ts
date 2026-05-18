@@ -74,7 +74,7 @@ export const mockModelMetrics: ModelMetrics[] = [
     test_r2: 0.7025,
     best_iteration: 642,
     validation_status: "PASSED",
-    trained_at: "2024-12-15T06:00:00Z",
+    trained_at: "2026-05-18T06:00:00Z",
     thresholds: THRESHOLDS,
   },
 ];

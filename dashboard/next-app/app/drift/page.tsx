@@ -1,445 +1,192 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Activity,
-  BarChart3,
-  Target,
-  Lightbulb,
-  AlertTriangle,
-  CheckCircle2,
-} from "lucide-react";
+import { motion } from "framer-motion";
+import { Activity, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
 import { getDriftReport } from "@/data";
 import DataBadge from "@/components/shared/DataBadge";
-import DriftHeatmap from "@/components/charts/DriftHeatmap";
-import StatusBadge from "@/components/shared/StatusBadge";
-import ScrollReveal from "@/components/shared/ScrollReveal";
-import TextReveal from "@/components/shared/TextReveal";
+import Tooltip from "@/components/shared/Tooltip";
 import { formatNumber } from "@/lib/utils";
 import type { DriftReport } from "@/types";
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 },
-  },
+const fade = {
+  hidden: { opacity: 0, y: 8 },
+  visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.07, duration: 0.3 } }),
 };
 
-const cardVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" as const } },
+// Category labels for features — makes them readable for ops team
+const FEATURE_LABELS: Record<string, string> = {
+  temperature_c: "Temperature", precipitation_mm: "Precipitation", feels_like_c: "Feels-like temp",
+  wind_speed_kmh: "Wind speed", humidity_pct: "Humidity", is_cold: "Cold flag", is_hot: "Hot flag", is_precipitation: "Rain flag",
+  demand_lag_1h: "Demand (1h ago)", demand_lag_24h: "Demand (24h ago)", demand_lag_168h: "Demand (last week)",
+  rolling_avg_3h: "3h rolling avg", rolling_avg_6h: "6h rolling avg", rolling_avg_24h: "24h rolling avg",
+  hour_of_day: "Hour of day", day_of_week: "Day of week", month: "Month", is_weekend: "Weekend flag",
+  is_holiday: "Holiday flag", hour_sin: "Hour (cyclic)", hour_cos: "Hour (cyclic)", dow_sin: "Weekday (cyclic)",
+  dow_cos: "Weekday (cyclic)", month_sin: "Month (cyclic)", month_cos: "Month (cyclic)",
+  capacity: "Station capacity", start_station_id: "Station ID",
+};
+
+function featureLabel(f: string) { return FEATURE_LABELS[f] ?? f; }
+function featureCategory(f: string): "weather" | "demand" | "time" | "station" {
+  if (["temperature_c","precipitation_mm","feels_like_c","wind_speed_kmh","humidity_pct","is_cold","is_hot","is_precipitation"].includes(f)) return "weather";
+  if (f.startsWith("demand") || f.startsWith("rolling")) return "demand";
+  if (["capacity","start_station_id"].includes(f)) return "station";
+  return "time";
+}
+const catColor: Record<string, string> = {
+  weather: "text-blue-300 bg-blue-500/10",
+  demand:  "text-purple-300 bg-purple-500/10",
+  time:    "text-slate-300 bg-slate-500/10",
+  station: "text-amber-300 bg-amber-500/10",
 };
 
 export default function DriftPage() {
   const [report, setReport] = useState<DriftReport | null>(null);
-  const [isLive, setIsLive] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getDriftReport().then((r) => {
-      setReport(r);
-      setIsLive(Object.keys(r.feature_drift?.drift_scores ?? {}).length > 0);
-    }).finally(() => setLoading(false));
+    getDriftReport().then(setReport).finally(() => setLoading(false));
   }, []);
 
-  if (loading || !report) {
-    return (
-      <div className="p-5 md:p-7 flex items-center justify-center min-h-[50vh]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-6 w-6 rounded-full border-2 border-blue-400/30 border-t-blue-400 animate-spin" />
-          <p className="text-sm text-slate-500">Loading data...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading || !report) return (
+    <div className="p-5 md:p-7 flex items-center justify-center min-h-[50vh]">
+      <div className="h-6 w-6 rounded-full border-2 border-blue-400/30 border-t-blue-400 animate-spin" />
+    </div>
+  );
 
-  const isAlert = report.overall_drift_detected;
+  const drifted   = report.feature_drift.drifted_features;
+  const hasDrift  = report.overall_drift_detected;
+  const maeIncrPct = report.performance_drift.mae_increase_pct;
+
+  // Top drifted features sorted by score descending
+  const topDrifted = drifted
+    .map(f => ({ feature: f, score: report.feature_drift.drift_scores[f] ?? 0 }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6);
+
+  // Show top 8 stable features for context
+  const topStable = Object.entries(report.feature_drift.drift_scores)
+    .filter(([f]) => !drifted.includes(f))
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 8);
+
+  const threshold = report.feature_drift.threshold;
 
   return (
-    <div className="min-h-screen bg-bg-primary bg-grid p-6 md:p-8 space-y-8">
-      {/* Title */}
-      <div>
-        <div className="flex items-center gap-3 mb-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500/20 shadow-[0_0_20px_rgba(6,182,212,0.15)]">
-            <Activity className="h-5 w-5 text-cyan-400" />
+    <div className="p-5 md:p-7 space-y-5 max-w-4xl">
+
+      {/* Header */}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
+        <Activity className="h-5 w-5 text-slate-500" />
+        <h1 className="text-[20px] font-semibold text-white tracking-tight">Model Drift</h1>
+        <DataBadge isLive={false} />
+      </motion.div>
+
+      {/* Verdict */}
+      <motion.div custom={0} variants={fade} initial="hidden" animate="visible"
+        className="rounded-xl bg-white/[0.03] border border-white/[0.07] px-4 py-4">
+        <div className="flex items-start gap-3">
+          {hasDrift
+            ? <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+            : <CheckCircle2  className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />}
+          <div>
+            <p className={`text-[13px] font-semibold ${hasDrift ? "text-amber-300" : "text-emerald-300"}`}>
+              {hasDrift
+                ? `Drift detected in ${drifted.length} feature${drifted.length > 1 ? "s" : ""} — retraining recommended`
+                : "No drift detected — model is tracking current patterns accurately"}
+            </p>
+            <p className="text-[12px] text-slate-400 mt-1 leading-relaxed">{report.recommendation}</p>
           </div>
-          <h1 className="text-3xl font-bold text-text-primary heading-premium">
-            <TextReveal text="Drift Monitoring" />
-          </h1>
-          <DataBadge isLive={isLive} />
         </div>
-        <p className="text-text-secondary max-w-3xl leading-relaxed">
-          KL divergence analysis of feature distributions at training time. Flags when
-          retraining may be needed — reviewed by an engineer before any action is taken.
-        </p>
-        <p className="text-[11px] text-slate-500 mt-2">
-          Report generated at last model promotion · Calendar features (month, year) flagged but excluded from retrain decision — performance MAE improved 30%
-        </p>
+      </motion.div>
+
+      {/* 3 signal KPIs */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          {
+            label: "Features drifted",
+            value: `${drifted.length} / ${Object.keys(report.feature_drift.drift_scores).length}`,
+            alert: drifted.length > 0,
+            tip: `KL divergence threshold: ${threshold}. Features above this threshold have shifted significantly from training distribution — the model may not have seen these input patterns before.`,
+          },
+          {
+            label: "Max KL divergence",
+            value: formatNumber(report.feature_drift.max_drift, 3),
+            alert: report.feature_drift.max_drift > threshold,
+            tip: `KL divergence measures how much a feature's current distribution differs from training. 0 = identical. >${threshold} = significant drift. Current max: ${formatNumber(report.feature_drift.max_drift, 3)} on "${featureLabel(drifted[0] ?? "")}"`,
+          },
+          {
+            label: "MAE degradation",
+            value: `+${formatNumber(maeIncrPct, 1)}%`,
+            alert: report.performance_drift.drift_detected,
+            tip: `Live MAE vs baseline MAE (${formatNumber(report.performance_drift.baseline_mae, 4)}). If degradation exceeds 20%, drift is flagged as performance drift. Current: +${formatNumber(maeIncrPct, 1)}%.`,
+          },
+        ].map(({ label, value, alert, tip }, i) => (
+          <motion.div key={label} custom={i + 1} variants={fade} initial="hidden" animate="visible"
+            className="rounded-xl bg-bg-card p-4">
+            <div className="flex items-center gap-1.5 mb-2">
+              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">{label}</p>
+              <Tooltip content={tip} />
+            </div>
+            <p className={`text-xl font-semibold tracking-tight ${alert ? "text-amber-300" : "text-white"}`}>{value}</p>
+          </motion.div>
+        ))}
       </div>
 
-      {/* Status Banner */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key="status"
-          initial={{ opacity: 0, scale: 0.97 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.97 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className={`rounded-2xl border p-6 flex items-center gap-4 backdrop-blur-xl bg-bg-secondary shadow-[0_8px_32px_rgba(0,0,0,0.3)] ${
-            isAlert
-              ? "border-red-500/40"
-              : "border-green-500/40"
-          }`}
-        >
-          <motion.div
-            animate={
-              isAlert
-                ? { scale: [1, 1.15, 1], opacity: [1, 0.7, 1] }
-                : {}
-            }
-            transition={
-              isAlert
-                ? { duration: 2, repeat: Infinity, ease: "easeInOut" }
-                : {}
-            }
-            className={`flex h-14 w-14 items-center justify-center rounded-full shrink-0 ${
-              isAlert
-                ? "bg-red-500/20 shadow-[0_0_25px_rgba(239,68,68,0.2)]"
-                : "bg-green-500/20 shadow-[0_0_25px_rgba(34,197,94,0.2)]"
-            }`}
-          >
-            {isAlert ? (
-              <AlertTriangle className="h-7 w-7 text-red-400" />
-            ) : (
-              <CheckCircle2 className="h-7 w-7 text-green-400" />
-            )}
-          </motion.div>
-          <div>
-            <h2
-              className={`text-xl font-bold ${
-                isAlert ? "text-red-400" : "text-green-400"
-              }`}
-            >
-              {isAlert ? "Drift Detected" : "No Drift Detected"}
-            </h2>
-            <p className="text-sm text-text-secondary mt-1">
-              {isAlert
-                ? "Calendar feature shift detected (month/year). MAE improved 30% — no retrain triggered. Reviewed and accepted by engineering."
-                : "All feature distributions, performance metrics, and target statistics are within normal thresholds."}
-            </p>
+      {hasDrift && topDrifted.length > 0 && (
+        <motion.div custom={4} variants={fade} initial="hidden" animate="visible"
+          className="rounded-xl bg-bg-card p-4">
+          <div className="flex items-center gap-1.5 mb-3">
+            <p className="text-[13px] font-semibold text-white">What drifted — and why it matters</p>
+            <Tooltip content="Features are ranked by KL divergence score. Weather features drifting usually means seasonal change. Demand lag features drifting means ridership behaviour has changed." />
+          </div>
+          <div className="space-y-2.5">
+            {topDrifted.map(({ feature, score }) => {
+              const cat   = featureCategory(feature);
+              const pct   = Math.min(100, (score / (report.feature_drift.max_drift || 1)) * 100);
+              return (
+                <div key={feature} className="flex items-center gap-3">
+                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded w-16 text-center shrink-0 ${catColor[cat]}`}>{cat}</span>
+                  <span className="text-[12px] text-slate-300 w-36 shrink-0">{featureLabel(feature)}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
+                    <motion.div className="h-full rounded-full bg-amber-400/60"
+                      initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.6, ease: "easeOut" }} />
+                  </div>
+                  <span className="text-[11px] text-amber-300/80 font-mono tabular-nums w-10 text-right">{formatNumber(score, 3)}</span>
+                  <ArrowRight className="h-3 w-3 text-slate-600 shrink-0" />
+                  <span className="text-[10px] text-slate-500 w-28 text-right">threshold {threshold}</span>
+                </div>
+              );
+            })}
           </div>
         </motion.div>
-      </AnimatePresence>
+      )}
 
-      {/* 3-Column Drift Category Grid */}
-      <div>
-        <p className="text-xs font-medium uppercase tracking-widest text-text-secondary mb-4">
-          DRIFT CATEGORIES
-        </p>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key="cards"
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="grid grid-cols-1 gap-6 md:grid-cols-3"
-          >
-            {/* Feature Drift */}
-            <motion.div
-              variants={cardVariants}
-              className="rounded-2xl border border-white/[0.08] border-l-4 border-l-blue-500 backdrop-blur-xl bg-bg-tertiary p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <BarChart3 className="h-5 w-5 text-blue-400" />
-                <h3 className="text-base font-semibold text-text-primary">Feature Drift</h3>
-                <div className="ml-auto">
-                  <StatusBadge
-                    status={report.feature_drift.drift_detected ? "error" : "success"}
-                    label={report.feature_drift.drift_detected ? "Drifted" : "Stable"}
-                  />
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">Max KL Score</span>
-                  <span className="font-mono font-medium text-text-primary">
-                    {formatNumber(report.feature_drift.max_drift, 4)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">Threshold</span>
-                  <span className="font-mono font-medium text-text-primary">
-                    {formatNumber(report.feature_drift.threshold, 2)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">Drifted Features</span>
-                  <span className="font-mono font-medium text-text-primary">
-                    {report.feature_drift.drifted_features.length}
-                  </span>
-                </div>
-                {/* Progress bar */}
-                <div className="mt-1">
-                  <div className="w-full h-2 rounded-full bg-bg-tertiary">
-                    <motion.div
-                      className={`h-2 rounded-full ${
-                        report.feature_drift.drift_detected ? "bg-red-500" : "bg-blue-500"
-                      }`}
-                      initial={{ width: 0 }}
-                      animate={{
-                        width: `${Math.min(
-                          (report.feature_drift.max_drift / report.feature_drift.threshold) * 100,
-                          100
-                        )}%`,
-                      }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                    />
-                  </div>
-                </div>
-                {report.feature_drift.drifted_features.length > 0 && (
-                  <div className="mt-2 pt-3 border-t border-white/[0.06]">
-                    <p className="text-xs text-text-secondary mb-2">Drifted features:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {report.feature_drift.drifted_features.map((f) => (
-                        <span
-                          key={f}
-                          className="bg-red-500/10 text-red-400 border border-red-500/20 rounded-full px-3 py-1 text-xs font-mono"
-                        >
-                          {f}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </motion.div>
+      {/* Stable features — collapsed summary, not a full heatmap */}
+      <motion.div custom={5} variants={fade} initial="hidden" animate="visible"
+        className="rounded-xl bg-bg-card p-4">
+        <div className="flex items-center gap-1.5 mb-3">
+          <p className="text-[13px] font-semibold text-white">
+            {hasDrift ? "Stable features" : "All features stable"}
+          </p>
+          <Tooltip content={`Features below KL divergence threshold of ${threshold} — the model's inputs are behaving as expected for these. No action needed.`} />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {topStable.map(([feature, score]) => (
+            <div key={feature} className="flex items-center gap-1.5 rounded-lg bg-white/[0.03] border border-white/[0.05] px-2.5 py-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/60 shrink-0" />
+              <span className="text-[11px] text-slate-400">{featureLabel(feature)}</span>
+              <span className="text-[10px] text-slate-600 font-mono">{formatNumber(score, 3)}</span>
+            </div>
+          ))}
+          {Object.keys(report.feature_drift.drift_scores).length - drifted.length > 8 && (
+            <span className="text-[11px] text-slate-500 px-2 py-1.5">
+              +{Object.keys(report.feature_drift.drift_scores).length - drifted.length - 8} more stable
+            </span>
+          )}
+        </div>
+      </motion.div>
 
-            {/* Performance Drift */}
-            <motion.div
-              variants={cardVariants}
-              className="rounded-2xl border border-white/[0.08] border-l-4 border-l-orange-500 backdrop-blur-xl bg-bg-tertiary p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <Activity className="h-5 w-5 text-orange-400" />
-                <h3 className="text-base font-semibold text-text-primary">Performance Drift</h3>
-                <div className="ml-auto">
-                  <StatusBadge
-                    status={report.performance_drift.drift_detected ? "error" : "success"}
-                    label={report.performance_drift.drift_detected ? "Degraded" : "Stable"}
-                  />
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">Baseline MAE</span>
-                  <span className="font-mono font-medium text-text-primary">
-                    {formatNumber(report.performance_drift.baseline_mae, 4)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">Current MAE</span>
-                  <span
-                    className={`font-mono font-medium ${
-                      report.performance_drift.drift_detected
-                        ? "text-red-400"
-                        : "text-text-primary"
-                    }`}
-                  >
-                    {formatNumber(report.performance_drift.current_mae, 4)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">MAE Increase</span>
-                  <span
-                    className={`font-mono font-medium ${
-                      report.performance_drift.drift_detected
-                        ? "text-red-400"
-                        : "text-green-400"
-                    }`}
-                  >
-                    +{formatNumber(report.performance_drift.mae_increase_pct, 2)}%
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">Threshold</span>
-                  <span className="font-mono font-medium text-text-primary">
-                    {formatNumber(report.performance_drift.threshold_pct, 1)}%
-                  </span>
-                </div>
-                {/* Progress bar */}
-                <div className="mt-1">
-                  <div className="w-full h-2 rounded-full bg-bg-tertiary">
-                    <motion.div
-                      className={`h-2 rounded-full ${
-                        report.performance_drift.drift_detected
-                          ? "bg-red-500"
-                          : "bg-orange-500"
-                      }`}
-                      initial={{ width: 0 }}
-                      animate={{
-                        width: `${Math.min(
-                          (report.performance_drift.mae_increase_pct /
-                            report.performance_drift.threshold_pct) *
-                            100,
-                          100
-                        )}%`,
-                      }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Target Drift */}
-            <motion.div
-              variants={cardVariants}
-              className="rounded-2xl border border-white/[0.08] border-l-4 border-l-purple-500 backdrop-blur-xl bg-bg-tertiary p-5 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <Target className="h-5 w-5 text-purple-400" />
-                <h3 className="text-base font-semibold text-text-primary">Target Drift</h3>
-                <div className="ml-auto">
-                  <StatusBadge
-                    status={report.target_drift.drift_detected ? "error" : "success"}
-                    label={report.target_drift.drift_detected ? "Shifted" : "Stable"}
-                  />
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">KL Divergence</span>
-                  <span
-                    className={`font-mono font-medium ${
-                      report.target_drift.drift_detected
-                        ? "text-red-400"
-                        : "text-text-primary"
-                    }`}
-                  >
-                    {formatNumber(report.target_drift.target_kl_divergence, 4)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">Threshold</span>
-                  <span className="font-mono font-medium text-text-primary">
-                    {formatNumber(report.target_drift.threshold, 2)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">Reference Mean</span>
-                  <span className="font-mono font-medium text-text-primary">
-                    {formatNumber(report.target_drift.reference_mean, 3)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">Current Mean</span>
-                  <span
-                    className={`font-mono font-medium ${
-                      report.target_drift.drift_detected
-                        ? "text-red-400"
-                        : "text-text-primary"
-                    }`}
-                  >
-                    {formatNumber(report.target_drift.current_mean, 3)}
-                  </span>
-                </div>
-                {/* Progress bar */}
-                <div className="mt-1">
-                  <div className="w-full h-2 rounded-full bg-bg-tertiary">
-                    <motion.div
-                      className={`h-2 rounded-full ${
-                        report.target_drift.drift_detected ? "bg-red-500" : "bg-purple-500"
-                      }`}
-                      initial={{ width: 0 }}
-                      animate={{
-                        width: `${Math.min(
-                          (report.target_drift.target_kl_divergence / report.target_drift.threshold) * 100,
-                          100
-                        )}%`,
-                      }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        </AnimatePresence>
-      </div>
-
-      {/* Drift Heatmap */}
-      <div>
-        <p className="text-xs font-medium uppercase tracking-widest text-text-secondary mb-4">
-          FEATURE DRIFT SCORES
-        </p>
-        <ScrollReveal>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key="heatmap"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.5 }}
-            >
-              <DriftHeatmap
-                driftScores={report.feature_drift.drift_scores}
-                threshold={report.feature_drift.threshold}
-              />
-            </motion.div>
-          </AnimatePresence>
-        </ScrollReveal>
-      </div>
-
-      {/* Recommendation Card */}
-      <div>
-        <p className="text-xs font-medium uppercase tracking-widest text-text-secondary mb-4">
-          RECOMMENDATION
-        </p>
-        <ScrollReveal>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key="rec"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-              className={`rounded-2xl border p-5 backdrop-blur-xl bg-gradient-to-r shadow-[0_8px_32px_rgba(0,0,0,0.3)] ${
-                isAlert
-                  ? "border-yellow-500/30 from-red-500/5 to-transparent"
-                  : "border-green-500/30 from-green-500/5 to-transparent"
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-full shrink-0 ${
-                    isAlert
-                      ? "bg-yellow-500/20 shadow-[0_0_20px_rgba(234,179,8,0.2)]"
-                      : "bg-green-500/20 shadow-[0_0_20px_rgba(34,197,94,0.2)]"
-                  }`}
-                >
-                  <Lightbulb
-                    className={`h-5 w-5 ${isAlert ? "text-yellow-400" : "text-green-400"}`}
-                  />
-                </div>
-                <div>
-                  <h3
-                    className={`text-sm font-semibold ${
-                      isAlert ? "text-yellow-400" : "text-green-400"
-                    }`}
-                  >
-                    Recommendation
-                  </h3>
-                  <p className="mt-1 text-sm text-text-secondary leading-relaxed">
-                    {report.recommendation}
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          </AnimatePresence>
-        </ScrollReveal>
-      </div>
     </div>
   );
 }

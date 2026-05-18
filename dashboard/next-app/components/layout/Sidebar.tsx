@@ -27,11 +27,10 @@ const opsNav = [
 ];
 
 const adminNav = [
-  { label: "Performance", href: "/performance", icon: BarChart3 },
+  { label: "Model Health", href: "/performance", icon: BarChart3 },
   { label: "Features", href: "/features", icon: Layers },
   { label: "Bias", href: "/bias", icon: Scale },
   { label: "Drift", href: "/drift", icon: Activity },
-  { label: "Pipeline", href: "/pipeline", icon: GitBranch },
   { label: "Cost Analysis", href: "/costs", icon: DollarSign },
 ];
 

@@ -5,124 +5,125 @@ import type {
 } from "@/types";
 import { mockStations } from "./stations";
 
-// ---------------------------------------------------------------------------
-// Helper – look up a station by ID (used for route building)
-// ---------------------------------------------------------------------------
 function stationById(id: string) {
   const s = mockStations.find((st) => st.station_id === id);
   if (!s) throw new Error(`Station ${id} not found`);
   return s;
 }
 
-// ---------------------------------------------------------------------------
-// 1. Station Statuses
-// ---------------------------------------------------------------------------
-
-// We assign a hand-crafted fill_pct to every station so that the distribution
-// matches the requested breakdown:
-//   ~8 critical  (fill_pct < 15 % or > 90 %)
-//   ~12 low      (15-30 %)
-//   ~20 moderate  (30-70 %)
-//   ~10 surplus   (70-90 %)
-
-const fillAssignments: Record<string, number> = {
-  // Critical – very empty (< 15 %)
-  A32001: 8,   // Back Bay / Stuart St
-  A32016: 10,  // Tremont St at West Brookline St (South End)
-  A32035: 7,   // Downtown Crossing
-  A32047: 5,   // Marine Park (South Boston)
-  // Critical – overfull (> 90 %)
-  A32007: 95,  // Harvard Square
-  A32011: 93,  // Davis Square
-  A32044: 92,  // Charlestown Navy Yard
-  A32030: 94,  // Kenmore Square
-
-  // Low (15-30 %)
-  A32002: 18,  // Copley Square
-  A32004: 22,  // Boylston St at Arlington St
-  A32017: 20,  // Washington St at Lenox St
-  A32019: 25,  // Harrison Ave
-  A32037: 17,  // Post Office Square
-  A32038: 28,  // Boston Common
-  A32046: 24,  // Broadway T Station
-  A32048: 19,  // L St at E Broadway
-  A32049: 27,  // Seaport Blvd
-  A32050: 22,  // Convention Center
-  A32039: 16,  // Faneuil Hall
-  A32042: 26,  // Paul Revere Park
-
-  // Surplus (70-90 %)
-  A32006: 85,  // MIT at Mass Ave
-  A32008: 78,  // Central Square
-  A32012: 82,  // Union Square
-  A32013: 76,  // Porter Square
-  A32021: 88,  // Packard's Corner
-  A32022: 80,  // Harvard Ave at Brighton Ave
-  A32031: 75,  // Fenway Park
-  A32040: 83,  // North End – Hanover St
-  A32041: 79,  // Lewis Wharf
-  A32043: 77,  // Bunker Hill Monument
-
-  // Moderate (30-70 %) – everything else
-  A32003: 55,  // Newbury St
-  A32005: 42,  // Commonwealth Ave at Gloucester
-  A32009: 60,  // Kendall/MIT T
-  A32010: 48,  // Cambridge Main Library
-  A32014: 38,  // Teele Square
-  A32015: 65,  // Magoun Square
-  A32018: 50,  // Columbus Ave at Mass Ave
-  A32020: 45,  // Peters Park
-  A32023: 52,  // Allston Green District
-  A32024: 58,  // Commonwealth Ave at Griggs
-  A32025: 40,  // N Beacon St
-  A32026: 62,  // Coolidge Corner
-  A32027: 35,  // Brookline Village
-  A32028: 44,  // Washington Square
-  A32029: 68,  // JFK Crossing
-  A32032: 53,  // Longwood Medical
-  A32033: 47,  // Museum of Fine Arts
-  A32034: 56,  // Northeastern University
-  A32036: 41,  // South Station
-  A32045: 63,  // Sullivan Square
-};
-
 function riskLevel(pct: number): StationStatus["risk_level"] {
-  if (pct < 15 || pct > 90) return "critical";
-  if (pct < 30) return "low";
-  if (pct > 70) return "surplus";
+  if (pct <= 10 || pct >= 92) return "critical";
+  if (pct <= 25) return "low";
+  if (pct >= 75) return "surplus";
   return "moderate";
 }
 
+// ── Fill assignments ──────────────────────────────────────────────────────────
+// Designed to tell a story:
+//   Transit hubs are being drained by morning commuters → critical/low
+//   University/residential areas filled overnight → surplus
+//   Tourist spots and low-cap stations mostly moderate
+//   A handful of low-cap stations critically empty (ignored by ops teams)
+
+const fillPct: Record<string, number> = {
+  // ── CRITICAL: transit hubs draining fast (commuter departure wave) ──
+  A32035: 5,   // Downtown Crossing — nearly empty, 2 bikes left on 35-dock station
+  A32036: 8,   // South Station — imminent stockout
+  A32009: 6,   // Kendall/MIT T — grad students cleared it out
+  A32046: 9,   // Broadway T Station — critical
+
+  // ── CRITICAL: surplus overflow (bikes arriving, no space) ──
+  A32007: 97,  // Harvard Square — overfull, bikes being chained to fences
+  A32011: 95,  // Davis Square — overflow
+  A32044: 93,  // Charlestown Navy Yard — bikes piling up
+
+  // ── LOW: draining toward critical within 2–3h ──
+  A32001: 18,  // Back Bay — low, high predicted demand next 2h
+  A32002: 14,  // Copley Square — near critical
+  A32016: 20,  // Tremont St — South End residential drain
+  A32038: 22,  // Boston Common — tourist arrivals not yet here
+  A32013: 16,  // Porter Square — commuter drain
+
+  // ── SURPLUS: bikes accumulating, need pickup ──
+  A32006: 88,  // MIT — overnight return, students not commuting yet
+  A32012: 85,  // Union Square — morning influx
+  A32021: 90,  // Packard's Corner — near overflow
+  A32030: 82,  // Kenmore Square — filling up
+  A32031: 78,  // Fenway Park — pre-game bikes arrived early
+  A32043: 80,  // Bunker Hill — tourist drop-offs
+  A32041: 76,  // Lewis Wharf — waterfront leisure riders returning
+
+  // ── MODERATE: healthy range ──
+  A32003: 52,  // Newbury St
+  A32004: 48,  // Boylston at Arlington
+  A32005: 44,  // Commonwealth Ave at Gloucester
+  A32008: 55,  // Central Square
+  A32010: 50,  // Cambridge Main Library
+  A32014: 40,  // Teele Square
+  A32015: 58,  // Magoun Square
+  A32017: 46,  // Washington St at Lenox
+  A32018: 53,  // Columbus Ave at Mass Ave
+  A32019: 38,  // Harrison Ave
+  A32020: 42,  // Peters Park
+  A32022: 60,  // Harvard Ave at Brighton
+  A32023: 48,  // Allston Green District
+  A32024: 45,  // Commonwealth Ave at Griggs
+  A32025: 50,  // N Beacon St
+  A32026: 62,  // Coolidge Corner
+  A32027: 55,  // Brookline Village
+  A32028: 40,  // Washington Square
+  A32029: 58,  // JFK Crossing
+  A32032: 65,  // Longwood Medical — steady clinical staff turnover
+  A32033: 48,  // Museum of Fine Arts
+  A32034: 52,  // Northeastern University
+  A32037: 44,  // Post Office Square
+  A32039: 58,  // Faneuil Hall
+  A32040: 62,  // North End — Hanover St
+  A32042: 38,  // Paul Revere Park
+  A32045: 54,  // Sullivan Square
+  A32047: 42,  // Marine Park
+  A32048: 48,  // L St at E Broadway
+  A32049: 55,  // Seaport Blvd
+  A32050: 36,  // Convention Center
+};
+
 export const mockStationStatuses: StationStatus[] = mockStations.map((s) => {
-  const fill_pct = fillAssignments[s.station_id] ?? 50;
+  const fill_pct = fillPct[s.station_id] ?? 50;
   const risk = riskLevel(fill_pct);
   const current_bikes = Math.round((s.capacity * fill_pct) / 100);
 
-  // Demand and flow scaled by risk
   let predicted_demand_1h: number;
   let predicted_demand_6h: number;
   let net_flow_1h: number;
 
   switch (risk) {
     case "critical":
-      predicted_demand_1h = +(Math.random() * 3 + 5).toFixed(1); // 5-8
-      predicted_demand_6h = +(Math.random() * 4 + 4).toFixed(1); // 4-8
-      net_flow_1h = fill_pct < 15 ? +(-Math.random() * 3 - 2).toFixed(1) : +(Math.random() * 2 + 1).toFixed(1);
+      if (fill_pct <= 10) {
+        // Draining — high demand, negative net flow (bikes leaving faster than arriving)
+        predicted_demand_1h = +(Math.random() * 3 + 6).toFixed(1);   // 6–9
+        predicted_demand_6h = +(Math.random() * 5 + 18).toFixed(1);  // 18–23
+        net_flow_1h         = +(-Math.random() * 3 - 3).toFixed(1);  // -3 to -6
+      } else {
+        // Overfull — low demand, positive net flow (bikes arriving, no room)
+        predicted_demand_1h = +(Math.random() * 1.5 + 0.5).toFixed(1); // 0.5–2
+        predicted_demand_6h = +(Math.random() * 4 + 4).toFixed(1);     // 4–8
+        net_flow_1h         = +(Math.random() * 3 + 2).toFixed(1);     // 2–5
+      }
       break;
     case "low":
-      predicted_demand_1h = +(Math.random() * 2 + 3).toFixed(1); // 3-5
-      predicted_demand_6h = +(Math.random() * 3 + 3).toFixed(1); // 3-6
-      net_flow_1h = +(-Math.random() * 2 - 0.5).toFixed(1);
+      predicted_demand_1h = +(Math.random() * 2 + 4).toFixed(1);   // 4–6
+      predicted_demand_6h = +(Math.random() * 4 + 10).toFixed(1);  // 10–14
+      net_flow_1h         = +(-Math.random() * 2 - 1).toFixed(1);  // -1 to -3
       break;
     case "surplus":
-      predicted_demand_1h = +(Math.random() * 2 + 1).toFixed(1); // 1-3
-      predicted_demand_6h = +(Math.random() * 2 + 2).toFixed(1); // 2-4
-      net_flow_1h = +(Math.random() * 3 + 1).toFixed(1);
+      predicted_demand_1h = +(Math.random() * 1.5 + 1).toFixed(1); // 1–2.5
+      predicted_demand_6h = +(Math.random() * 3 + 4).toFixed(1);   // 4–7
+      net_flow_1h         = +(Math.random() * 2 + 1).toFixed(1);   // 1–3
       break;
     default: // moderate
-      predicted_demand_1h = +(Math.random() * 3 + 2).toFixed(1); // 2-5
-      predicted_demand_6h = +(Math.random() * 3 + 2.5).toFixed(1); // 2.5-5.5
-      net_flow_1h = +(Math.random() * 2 - 1).toFixed(1); // -1 to 1
+      predicted_demand_1h = +(Math.random() * 3 + 2).toFixed(1);   // 2–5
+      predicted_demand_6h = +(Math.random() * 4 + 5).toFixed(1);   // 5–9
+      net_flow_1h         = +(Math.random() * 2 - 1).toFixed(1);   // -1 to 1
   }
 
   return {
@@ -137,21 +138,10 @@ export const mockStationStatuses: StationStatus[] = mockStations.map((s) => {
   };
 });
 
-// ---------------------------------------------------------------------------
-// 2. Rebalancing Routes
-// ---------------------------------------------------------------------------
-
-// Route 1 – Truck Alpha (active): Cambridge/Somerville surplus → Downtown/South End critical
-const alpha_pickups = ["A32007", "A32011", "A32012"]; // Harvard Sq, Davis Sq, Union Sq
-const alpha_dropoffs = ["A32035", "A32016", "A32001"]; // Downtown Crossing, Tremont St, Back Bay
-
-// Route 2 – Truck Beta (active): Fenway/Allston surplus → Back Bay critical/low
-const beta_pickups = ["A32031", "A32021"]; // Fenway Park, Packard's Corner
-const beta_dropoffs = ["A32002", "A32004"]; // Copley Square, Boylston at Arlington
-
-// Route 3 – Truck Gamma (planned): Charlestown/North End surplus → South Boston critical
-const gamma_pickups = ["A32043", "A32040"]; // Bunker Hill, North End Hanover
-const gamma_dropoffs = ["A32047", "A32048", "A32046"]; // Marine Park, L St, Broadway T
+// ── Rebalancing Routes ────────────────────────────────────────────────────────
+// Truck Alpha: URGENT — picking from Harvard/Davis/MIT surplus → Downtown/Kendall/South Station critical
+// Truck Beta:  ACTIVE  — Charlestown/Fenway surplus → Back Bay/Copley low
+// Truck Gamma: PLANNED — Union Sq/Packard's surplus → Broadway/Porter low
 
 function buildStop(
   id: string,
@@ -160,115 +150,90 @@ function buildStop(
   order: number,
 ) {
   const s = stationById(id);
-  return {
-    station_id: s.station_id,
-    station_name: s.station_name,
-    lat: s.lat,
-    lon: s.lon,
-    action,
-    bikes,
-    order,
-  };
+  return { station_id: s.station_id, station_name: s.station_name, lat: s.lat, lon: s.lon, action, bikes, order };
 }
 
 export const mockRebalancingRoutes: RebalancingRoute[] = [
   {
-    route_id: "RB-20260403-001",
+    route_id: "RB-URGENT-001",
     truck_id: "Truck Alpha",
     stops: [
-      buildStop(alpha_pickups[0], "pickup", 10, 1),
-      buildStop(alpha_pickups[1], "pickup", 8, 2),
-      buildStop(alpha_pickups[2], "pickup", 6, 3),
-      buildStop(alpha_dropoffs[0], "dropoff", 9, 4),
-      buildStop(alpha_dropoffs[1], "dropoff", 8, 5),
-      buildStop(alpha_dropoffs[2], "dropoff", 7, 6),
+      buildStop("A32007", "pickup", 12, 1),  // Harvard Sq — 97% full → take 12
+      buildStop("A32011", "pickup",  9, 2),  // Davis Sq — 95% full → take 9
+      buildStop("A32035", "dropoff",10, 3),  // Downtown Crossing — 5% → drop 10 (priority)
+      buildStop("A32036", "dropoff", 7, 4),  // South Station — 8% → drop 7
+      buildStop("A32009", "dropoff", 4, 5),  // Kendall/MIT T — 6% → drop 4
     ],
-    total_distance_km: 8.5,
-    estimated_duration_min: 35,
-    bikes_moved: 24,
+    total_distance_km: 9.2,
+    estimated_duration_min: 38,
+    bikes_moved: 21,
     status: "active",
   },
   {
-    route_id: "RB-20260403-002",
+    route_id: "RB-ACTIVE-002",
     truck_id: "Truck Beta",
     stops: [
-      buildStop(beta_pickups[0], "pickup", 9, 1),
-      buildStop(beta_pickups[1], "pickup", 7, 2),
-      buildStop(beta_dropoffs[0], "dropoff", 8, 3),
-      buildStop(beta_dropoffs[1], "dropoff", 8, 4),
+      buildStop("A32044", "pickup",  8, 1),  // Charlestown Navy Yard — 93% → take 8
+      buildStop("A32031", "pickup",  6, 2),  // Fenway Park — 78% → take 6
+      buildStop("A32001", "dropoff", 7, 3),  // Back Bay — 18% → drop 7
+      buildStop("A32002", "dropoff", 5, 4),  // Copley Square — 14% → drop 5
+      buildStop("A32013", "dropoff", 2, 5),  // Porter Square — 16% → drop 2
     ],
-    total_distance_km: 5.2,
-    estimated_duration_min: 22,
-    bikes_moved: 16,
+    total_distance_km: 7.4,
+    estimated_duration_min: 30,
+    bikes_moved: 14,
     status: "active",
   },
   {
-    route_id: "RB-20260403-003",
+    route_id: "RB-PLANNED-003",
     truck_id: "Truck Gamma",
     stops: [
-      buildStop(gamma_pickups[0], "pickup", 10, 1),
-      buildStop(gamma_pickups[1], "pickup", 10, 2),
-      buildStop(gamma_dropoffs[0], "dropoff", 7, 3),
-      buildStop(gamma_dropoffs[1], "dropoff", 6, 4),
-      buildStop(gamma_dropoffs[2], "dropoff", 7, 5),
+      buildStop("A32012", "pickup",  8, 1),  // Union Square — 85% → take 8
+      buildStop("A32021", "pickup",  6, 2),  // Packard's Corner — 90% → take 6
+      buildStop("A32046", "dropoff", 6, 3),  // Broadway T — 9% → drop 6 (critical)
+      buildStop("A32016", "dropoff", 5, 4),  // Tremont St — 20% → drop 5
+      buildStop("A32038", "dropoff", 3, 5),  // Boston Common — 22% → drop 3
     ],
-    total_distance_km: 7.1,
-    estimated_duration_min: 30,
-    bikes_moved: 20,
+    total_distance_km: 6.8,
+    estimated_duration_min: 28,
+    bikes_moved: 14,
     status: "planned",
   },
 ];
 
-// ---------------------------------------------------------------------------
-// 3. Demand Heatmap   (7 days × 24 hours = 168 entries)
-// ---------------------------------------------------------------------------
+// ── Demand Heatmap (7 days × 24 hours) ───────────────────────────────────────
+// Weekdays: sharp AM (7–9) and PM (17–19) commuter peaks
+// Weekends: midday leisure plateau, no commuter spikes
+// Friday evening slightly elevated (social rides)
 
 const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function demandFor(day: string, hour: number): number {
   const isWeekend = day === "Sat" || day === "Sun";
+  const isFriday  = day === "Fri";
+  const r = () => Math.random();
 
-  // Night: 0-5
-  if (hour >= 0 && hour <= 5) {
-    return +(Math.random() * 0.8 + 0.2).toFixed(1); // 0.2-1.0
-  }
+  if (hour <= 5)  return +(r() * 0.6 + 0.1).toFixed(1);   // dead overnight: 0.1–0.7
 
   if (isWeekend) {
-    // Weekend early morning: 6-9
-    if (hour >= 6 && hour <= 9) {
-      return +(Math.random() * 2 + 1).toFixed(1); // 1-3
-    }
-    // Weekend midday peak: 10-15
-    if (hour >= 10 && hour <= 15) {
-      return +(Math.random() * 2 + 5).toFixed(1); // 5-7
-    }
-    // Weekend afternoon/evening: 16-20
-    if (hour >= 16 && hour <= 20) {
-      return +(Math.random() * 2 + 3).toFixed(1); // 3-5
-    }
-    // Weekend late evening: 21-23
-    return +(Math.random() * 1.5 + 1).toFixed(1); // 1-2.5
+    if (hour <= 9)  return +(r() * 1.5 + 0.5).toFixed(1); // slow morning: 0.5–2
+    if (hour <= 15) return +(r() * 3 + 5).toFixed(1);     // leisure plateau: 5–8
+    if (hour <= 19) return +(r() * 2 + 3.5).toFixed(1);   // afternoon wind-down: 3.5–5.5
+    return              +(r() * 1.5 + 1).toFixed(1);       // evening: 1–2.5
   }
 
-  // Weekday patterns
-  // Early morning ramp-up: 6
-  if (hour === 6) {
-    return +(Math.random() * 1.5 + 2.5).toFixed(1); // 2.5-4
+  // Weekday
+  if (hour === 6)  return +(r() * 2 + 2).toFixed(1);      // ramp-up: 2–4
+  if (hour <= 9)   return +(r() * 3 + 7).toFixed(1);      // AM commute peak: 7–10
+  if (hour <= 11)  return +(r() * 2 + 3).toFixed(1);      // post-rush taper: 3–5
+  if (hour <= 13)  return +(r() * 2 + 4).toFixed(1);      // lunch bump: 4–6
+  if (hour <= 16)  return +(r() * 2 + 3).toFixed(1);      // afternoon: 3–5
+  if (hour <= 19)  {
+    const base = isFriday ? 9 : 7.5;                       // Friday PM slightly higher
+    return +(r() * 3 + base).toFixed(1);                   // PM commute peak: 7.5–11
   }
-  // Morning commute: 7-9
-  if (hour >= 7 && hour <= 9) {
-    return +(Math.random() * 3 + 6).toFixed(1); // 6-9
-  }
-  // Midday: 10-16
-  if (hour >= 10 && hour <= 16) {
-    return +(Math.random() * 2 + 3).toFixed(1); // 3-5
-  }
-  // Evening commute: 17-19
-  if (hour >= 17 && hour <= 19) {
-    return +(Math.random() * 3 + 7).toFixed(1); // 7-10
-  }
-  // Late evening: 20-23
-  return +(Math.random() * 1.5 + 1.5).toFixed(1); // 1.5-3
+  if (hour <= 21)  return +(r() * 2 + 2).toFixed(1);      // evening taper: 2–4
+  return               +(r() * 1 + 0.5).toFixed(1);        // late night: 0.5–1.5
 }
 
 export const mockDemandHeatmap: DemandHeatmapEntry[] = days.flatMap((day) =>
