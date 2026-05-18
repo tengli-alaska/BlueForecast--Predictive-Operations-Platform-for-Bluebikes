@@ -8,9 +8,9 @@ on:
   pull_request:
     paths:
       - 'Model-Pipeline/**'
-  schedule:
-    # Run CI training check every Monday at 03:00 UTC
-    - cron: '0 3 * * 1'
+  # schedule:
+  #   # paused — project graded, not in production
+  #   - cron: '0 3 * * 1'
   workflow_dispatch:
     inputs:
       run_training:

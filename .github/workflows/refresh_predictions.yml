@@ -1,8 +1,8 @@
 name: BlueForecast - Refresh Predictions
 
 on:
-  schedule:
-    - cron: "0 */6 * * *"   # every 6 hours — fresh forecasts for ops team
+  # schedule:
+  #   - cron: "0 */6 * * *"   # paused — project graded, not in production
   workflow_dispatch:         # manual trigger for demo / on-demand
 
 env:

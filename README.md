@@ -366,6 +366,33 @@ The full deployment pipeline (Cloud Run, edge inference, CI/CD, monitoring) is d
 | Model monitoring + retraining | GCP + MLflow | Scheduled weekly; also manual dispatch |
 | Edge inference server | Any device | Docker + ONNX, zero cloud dependencies |
 
+### Scheduled Workflows — Paused
+
+> **Status: All scheduled runs paused as of 2026-05-18.**
+> Project graded and submitted; not in active production.
+
+The following GitHub Actions cron schedules have been commented out:
+
+| Workflow | Previous schedule | File |
+|----------|------------------|------|
+| Refresh predictions (24h forecast) | Every 6 hours | `.github/workflows/refresh_predictions.yml` |
+| Model pipeline CI training | Every Monday 03:00 UTC | `.github/workflows/model_pipeline.yml` |
+| Monitor & retrain (drift check) | Every Sunday 02:00 UTC | `.github/workflows/monitor_and_retrain.yml` |
+
+All three workflows retain `workflow_dispatch` — you can still trigger any of them manually from the GitHub Actions tab at any time.
+
+**To resume scheduled runs**, uncomment the `schedule:` block in the relevant workflow file(s):
+
+```yaml
+# Before (paused):
+# schedule:
+#   - cron: '0 */6 * * *'
+
+# After (active):
+schedule:
+  - cron: '0 */6 * * *'
+```
+
 ### Replication steps (abbreviated)
 
 ```bash

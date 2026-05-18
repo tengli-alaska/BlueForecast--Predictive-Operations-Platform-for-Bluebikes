@@ -1,9 +1,9 @@
 name: BlueForecast - Monitor and Retrain
 
 on:
-  schedule:
-    # Run drift check every Sunday at 02:00 UTC; retrain automatically if drift detected
-    - cron: '0 2 * * 0'
+  # schedule:
+  #   # paused — project graded, not in production
+  #   - cron: '0 2 * * 0'
   workflow_dispatch:
     inputs:
       force_retrain:
