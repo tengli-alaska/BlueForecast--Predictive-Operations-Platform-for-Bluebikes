@@ -132,13 +132,23 @@ export default function RebalancingPage() {
         ))}
       </div>
 
-      {/* ── Command panel: priority list LEFT · map RIGHT ─────────────────── */}
+      {/* ── Command panel: map LEFT · priority list RIGHT ────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-        className="grid grid-cols-[2fr_3fr] gap-3"
+        className="grid grid-cols-[3fr_2fr] gap-3"
         style={{ height: PANEL_H }}
       >
-        {/* Left — priority list */}
+        {/* Left — map */}
+        <div className="rounded-xl overflow-hidden border border-white/[0.05]">
+          <RebalancingMapWrapper
+            stations={statuses}
+            routes={routes}
+            stationNames={stationLookup}
+            height={`${PANEL_H}px`}
+          />
+        </div>
+
+        {/* Right — priority list */}
         <div className="rounded-xl bg-bg-card border border-white/[0.05] flex flex-col overflow-hidden">
           {/* List header */}
           <div className="px-4 py-3 border-b border-white/[0.05] flex items-center gap-1.5 shrink-0">
@@ -161,7 +171,6 @@ export default function RebalancingPage() {
               return (
                 <div key={s.station_id}
                   className="grid grid-cols-[1fr_52px_44px_40px] gap-1 items-center px-4 py-2 hover:bg-white/[0.02] transition-colors">
-                  {/* Name + fill bar */}
                   <div className="min-w-0">
                     <p className="text-[11px] text-slate-300 truncate leading-tight" title={name}>{name}</p>
                     <div className="mt-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden w-full">
@@ -180,16 +189,6 @@ export default function RebalancingPage() {
               );
             })}
           </div>
-        </div>
-
-        {/* Right — map */}
-        <div className="rounded-xl overflow-hidden border border-white/[0.05]">
-          <RebalancingMapWrapper
-            stations={statuses}
-            routes={routes}
-            stationNames={stationLookup}
-            height={`${PANEL_H}px`}
-          />
         </div>
       </motion.div>
 

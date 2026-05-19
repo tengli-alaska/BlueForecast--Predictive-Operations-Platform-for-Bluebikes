@@ -82,7 +82,7 @@ export default function FeatureImportanceChart({
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
+        transition={{ duration: 0.6, ease: "easeOut" as const }}
       >
         <ResponsiveContainer width="100%" height={Math.max(400, displayData.length * 30)}>
           <BarChart

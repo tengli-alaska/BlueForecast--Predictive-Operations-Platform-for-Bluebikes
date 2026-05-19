@@ -231,7 +231,7 @@ export default function StationsPage() {
                         style={{ backgroundColor: tier.color, opacity: 0.7 }}
                         initial={{ width: 0 }}
                         animate={{ width: `${(peak / maxPeak) * 100}%` }}
-                        transition={{ duration: 0.5, delay: i * 0.01, ease: "easeOut" }} />
+                        transition={{ duration: 0.5, delay: i * 0.01, ease: "easeOut" as const }} />
                     </div>
                     <span className="text-[10px] tabular-nums shrink-0" style={{ color: tier.color }}>
                       {peak.toFixed(1)}

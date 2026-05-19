@@ -39,7 +39,7 @@ export default function KpiCard({
         scale: 1.02,
         boxShadow: `0 4px 24px ${color}18`,
       }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
+      transition={{ duration: 0.25, ease: "easeOut" as const }}
     >
       {/* Top accent line — thin and precise */}
       <div

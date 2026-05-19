@@ -19,7 +19,7 @@ import type { ModelMetrics, BiasReport, DriftReport, StationStatus } from "@/typ
 
 const fade = {
   hidden: { opacity: 0, y: 10 },
-  visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.07, duration: 0.35, ease: "easeOut" } }),
+  visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.07, duration: 0.35, ease: "easeOut" as const } }),
 };
 
 interface OverviewData {
@@ -91,13 +91,15 @@ export default function OverviewPage() {
     attention.push({ dot: "bg-red-400", label: `${needBikes.length} station${needBikes.length > 1 ? "s" : ""} nearly empty`, sub: `Needs bikes before ${nextPeakLabel()}`, href: "/rebalancing", urgent: true });
   if (overflow.length > 0)
     attention.push({ dot: "bg-amber-400", label: `${overflow.length} station${overflow.length > 1 ? "s" : ""} overflowing`, sub: "Schedule a pickup — riders being turned away", href: "/rebalancing" });
-  if (low.length > 0)
-    attention.push({ dot: "bg-amber-400/70", label: `${low.length} stations trending low`, sub: "Monitor — will need bikes within 3–4 h", href: "/forecasts" });
+  if (low.length > 0) {
+    const lowIds = low.map(s => s.station_id).join(",");
+    attention.push({ dot: "bg-amber-400/70", label: `${low.length} stations trending low`, sub: "Monitor — will need bikes within 3–4 h", href: `/forecasts?focus=${lowIds}` });
+  }
   if (driftReport.overall_drift_detected)
     attention.push({ dot: "bg-blue-400", label: "Model drift detected", sub: `${driftReport.feature_drift.drifted_features.length} features shifted — review accuracy`, href: "/drift" });
 
   return (
-    <div className="p-5 md:p-8 space-y-5 max-w-4xl">
+    <div className="p-5 md:p-8 space-y-5">
 
       {/* ── Header ─────────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-between">
@@ -149,13 +151,13 @@ export default function OverviewPage() {
           <div className="flex h-2 rounded-full overflow-hidden gap-[2px]">
             <motion.div className="bg-emerald-500/60 rounded-l-full"
               initial={{ width: 0 }} animate={{ width: `${(healthy.length / total) * 100}%` }}
-              transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }} />
+              transition={{ duration: 0.8, ease: "easeOut" as const, delay: 0.2 }} />
             <motion.div className="bg-amber-400/60"
               initial={{ width: 0 }} animate={{ width: `${(low.length / total) * 100}%` }}
-              transition={{ duration: 0.8, ease: "easeOut", delay: 0.3 }} />
+              transition={{ duration: 0.8, ease: "easeOut" as const, delay: 0.3 }} />
             <motion.div className="bg-red-400/60 rounded-r-full"
               initial={{ width: 0 }} animate={{ width: `${(critical.length / total) * 100}%` }}
-              transition={{ duration: 0.8, ease: "easeOut", delay: 0.4 }} />
+              transition={{ duration: 0.8, ease: "easeOut" as const, delay: 0.4 }} />
           </div>
           <div className="flex justify-between mt-1.5 text-[10px] text-slate-600">
             <span>Healthy</span><span>Low</span><span>Critical</span>
@@ -272,7 +274,7 @@ export default function OverviewPage() {
                   style={isRush ? { background: "linear-gradient(to top, rgba(59,130,246,0.8), rgba(96,165,250,0.4))" } : {}}
                   initial={{ height: 0 }}
                   animate={{ height: px }}
-                  transition={{ duration: 0.5, delay: h * 0.016, ease: "easeOut" }}
+                  transition={{ duration: 0.5, delay: h * 0.016, ease: "easeOut" as const }}
                 />
               </div>
             );

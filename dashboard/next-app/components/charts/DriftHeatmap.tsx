@@ -41,7 +41,7 @@ export default function DriftHeatmap({
             transition={{
               duration: 0.3,
               delay: index * 0.05,
-              ease: "easeOut",
+              ease: "easeOut" as const,
             }}
             className={`rounded-lg border p-3 ${getCellBgClass(score, threshold)}`}
           >

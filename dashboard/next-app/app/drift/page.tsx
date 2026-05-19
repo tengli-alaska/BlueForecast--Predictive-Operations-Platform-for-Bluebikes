@@ -73,7 +73,7 @@ export default function DriftPage() {
   const threshold = report.feature_drift.threshold;
 
   return (
-    <div className="p-5 md:p-7 space-y-5 max-w-4xl">
+    <div className="p-5 md:p-7 space-y-5">
 
       {/* Header */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
@@ -150,7 +150,7 @@ export default function DriftPage() {
                   <span className="text-[12px] text-slate-300 w-36 shrink-0">{featureLabel(feature)}</span>
                   <div className="flex-1 h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
                     <motion.div className="h-full rounded-full bg-amber-400/60"
-                      initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.6, ease: "easeOut" }} />
+                      initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.6, ease: "easeOut" as const }} />
                   </div>
                   <span className="text-[11px] text-amber-300/80 font-mono tabular-nums w-10 text-right">{formatNumber(score, 3)}</span>
                   <ArrowRight className="h-3 w-3 text-slate-600 shrink-0" />

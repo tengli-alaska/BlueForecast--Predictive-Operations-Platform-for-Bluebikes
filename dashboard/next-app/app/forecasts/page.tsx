@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { motion } from "framer-motion";
-import { Search } from "lucide-react";
+import { Search, AlertTriangle } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import ForecastLineChart from "@/components/charts/ForecastLineChart";
 import DataBadge from "@/components/shared/DataBadge";
 import Tooltip from "@/components/shared/Tooltip";
@@ -29,6 +30,16 @@ function actionLabel(d: number): string {
 }
 
 export default function ForecastsPage() {
+  return <Suspense><ForecastsInner /></Suspense>;
+}
+
+function ForecastsInner() {
+  const searchParams = useSearchParams();
+  const focusIds = useMemo(() => {
+    const raw = searchParams.get("focus");
+    return raw ? raw.split(",").filter(Boolean) : [];
+  }, [searchParams]);
+
   const [stations,        setStations]        = useState<Station[]>([]);
   const [selectedId,      setSelectedId]      = useState("");
   const [predictions,     setPredictions]     = useState<Prediction[]>([]);
@@ -48,7 +59,10 @@ export default function ForecastsPage() {
     Promise.all([getStations(), getStationMapping()])
       .then(([{ data }, mapping]) => {
         setStations(data);
-        if (data.length > 0) setSelectedId(data[0].station_id);
+        // Pre-select first focus station if coming from overview CTA, else first station
+        const firstFocus = focusIds.length > 0 ? data.find(s => focusIds.includes(s.station_id)) : null;
+        if (firstFocus) setSelectedId(firstFocus.station_id);
+        else if (data.length > 0) setSelectedId(data[0].station_id);
         const lookup: Record<string, string> = {};
         for (const row of mapping) {
           if (row.gbfs_station_id) lookup[row.gbfs_station_id] = row.start_station_id;
@@ -72,8 +86,14 @@ export default function ForecastsPage() {
 
   const filteredStations = useMemo(() => {
     const q = search.toLowerCase();
-    return stations.filter(s => !q || s.station_name.toLowerCase().includes(q));
-  }, [stations, search]);
+    const filtered = stations.filter(s => !q || s.station_name.toLowerCase().includes(q));
+    if (focusIds.length === 0) return filtered;
+    // Pin focus stations to the top
+    return [
+      ...filtered.filter(s => focusIds.includes(s.station_id)),
+      ...filtered.filter(s => !focusIds.includes(s.station_id)),
+    ];
+  }, [stations, search, focusIds]);
 
   if (loading) return (
     <div className="p-5 md:p-7 flex items-center justify-center min-h-[50vh]">
@@ -84,7 +104,7 @@ export default function ForecastsPage() {
   const stationType = selectedId ? typeById[selectedId] : undefined;
 
   return (
-    <div className="p-5 md:p-7 space-y-4 max-w-5xl">
+    <div className="p-5 md:p-7 space-y-4">
 
       {/* Header */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-between">
@@ -105,19 +125,34 @@ export default function ForecastsPage() {
         </div>
       </motion.div>
 
+      {/* Focus banner — shown when arriving from overview CTA */}
+      {focusIds.length > 0 && (
+        <motion.div custom={0} variants={fade} initial="hidden" animate="visible"
+          className="flex items-center gap-2 rounded-xl bg-amber-500/[0.06] border border-amber-500/15 px-4 py-2.5">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+          <p className="text-[12px] text-amber-300/90">
+            <span className="font-semibold">{focusIds.length} station{focusIds.length > 1 ? "s" : ""} trending low</span>
+            {" "}— pinned to the top. Check each one to plan restocking before demand peaks.
+          </p>
+        </motion.div>
+      )}
+
       {/* Station picker — horizontal scrollable pills */}
-      <motion.div custom={0} variants={fade} initial="hidden" animate="visible"
+      <motion.div custom={1} variants={fade} initial="hidden" animate="visible"
         className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
         {filteredStations.map(s => {
-          const isSelected = s.station_id === selectedId;
-          const type = typeById[s.station_id];
+          const isSelected  = s.station_id === selectedId;
+          const isFocus     = focusIds.includes(s.station_id);
           return (
             <button key={s.station_id} onClick={() => setSelectedId(s.station_id)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-medium whitespace-nowrap shrink-0 transition-all ${
                 isSelected
                   ? "bg-blue-500/20 border-blue-500/30 text-blue-200"
+                  : isFocus
+                  ? "bg-amber-500/[0.08] border-amber-500/25 text-amber-300/90 hover:border-amber-500/40"
                   : "bg-white/[0.02] border-white/[0.06] text-slate-500 hover:text-slate-300 hover:border-white/[0.1]"
               }`}>
+              {isFocus && !isSelected && <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />}
               {s.station_name.split(" - ")[0].split(" / ")[0].split(" at ")[0].substring(0, 22)}
             </button>
           );
@@ -126,7 +161,7 @@ export default function ForecastsPage() {
 
       {/* Verdict */}
       {predictions.length > 0 && (
-        <motion.div custom={1} variants={fade} initial="hidden" animate="visible"
+        <motion.div custom={2} variants={fade} initial="hidden" animate="visible"
           className="flex items-center gap-3 rounded-xl bg-white/[0.03] border border-white/[0.07] px-4 py-2.5">
           <span className={`h-2 w-2 rounded-full shrink-0 ${peakDemand >= 5 ? "bg-amber-400 ring-2 ring-amber-400/20" : peakDemand >= 2 ? "bg-blue-400" : "bg-emerald-400"}`} />
           <p className="text-[13px] font-medium text-slate-200">
@@ -140,7 +175,7 @@ export default function ForecastsPage() {
       )}
 
       {/* Chart + station summary side by side */}
-      <motion.div custom={2} variants={fade} initial="hidden" animate="visible"
+      <motion.div custom={3} variants={fade} initial="hidden" animate="visible"
         className="grid grid-cols-[1fr_220px] gap-3">
 
         {/* Chart */}
@@ -196,7 +231,7 @@ export default function ForecastsPage() {
       </motion.div>
 
       {/* Hourly table — 3 clean columns only */}
-      <motion.div custom={3} variants={fade} initial="hidden" animate="visible"
+      <motion.div custom={4} variants={fade} initial="hidden" animate="visible"
         className="rounded-xl bg-bg-card border border-white/[0.05] overflow-hidden">
         <div className="px-4 py-3 border-b border-white/[0.05] flex items-center justify-between">
           <p className="text-[12px] font-semibold text-white">Hourly breakdown</p>

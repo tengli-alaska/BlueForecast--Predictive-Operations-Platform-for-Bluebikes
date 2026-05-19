@@ -33,7 +33,7 @@ export default function AnimatedCounter({
     if (isInView) {
       const controls = animate(motionValue, value, {
         duration,
-        ease: "easeOut",
+        ease: "easeOut" as const,
       });
       return controls.stop;
     }

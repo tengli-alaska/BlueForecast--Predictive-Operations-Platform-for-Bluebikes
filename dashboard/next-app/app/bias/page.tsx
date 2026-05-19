@@ -58,7 +58,7 @@ export default function BiasPage() {
   const maxRatio      = Math.max(...report.slices.map(s => s.disparity_ratio), 1);
 
   return (
-    <div className="p-5 md:p-7 space-y-5 max-w-4xl">
+    <div className="p-5 md:p-7 space-y-5">
 
       {/* Header */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
@@ -163,7 +163,7 @@ export default function BiasPage() {
                   <motion.div className={`h-full rounded-full ${bar}`}
                     initial={{ width: 0 }}
                     animate={{ width: `${barPct}%` }}
-                    transition={{ duration: 0.6, delay: i * 0.05, ease: "easeOut" }} />
+                    transition={{ duration: 0.6, delay: i * 0.05, ease: "easeOut" as const }} />
                 </div>
 
                 {/* High group */}

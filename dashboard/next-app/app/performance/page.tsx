@@ -115,7 +115,7 @@ export default function ModelHealthPage() {
   ];
 
   return (
-    <div className="p-5 md:p-7 space-y-5 max-w-4xl">
+    <div className="p-5 md:p-7 space-y-5">
 
       {/* Header */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-between">

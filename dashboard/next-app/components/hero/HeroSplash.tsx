@@ -289,7 +289,7 @@ function GlobeOrb({ visible }: { visible: boolean }) {
               transition={{
                 duration: 1.5,
                 delay: arc.delay,
-                ease: "easeOut",
+                ease: "easeOut" as const,
               }}
             />
           ))}
@@ -543,7 +543,7 @@ function NeuralBackground() {
             transition={{
               duration: 2,
               delay: edge.delay,
-              ease: "easeOut",
+              ease: "easeOut" as const,
             }}
           />
         ))}
@@ -559,7 +559,7 @@ function NeuralBackground() {
             transition={{
               duration: 1.5,
               delay: node.delay,
-              ease: "easeOut",
+              ease: "easeOut" as const,
             }}
           />
         ))}
@@ -936,7 +936,7 @@ function StaggerWords({
           transition={{
             duration: 0.45,
             delay: startDelay + i * staggerDelay,
-            ease: "easeOut",
+            ease: "easeOut" as const,
           }}
         >
           {word}

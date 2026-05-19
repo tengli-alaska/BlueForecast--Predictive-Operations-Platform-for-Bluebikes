@@ -45,7 +45,7 @@ export default function AlertBanner({
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
+      transition={{ duration: 0.3, ease: "easeOut" as const }}
       className={`flex items-start gap-3 rounded-xl border ${config.border} bg-white/[0.02] p-4`}
     >
       <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${config.iconColor}`} />

@@ -41,7 +41,7 @@ export default function GlassCard({
             }
           : undefined
       }
-      transition={{ duration: 0.3, ease: "easeOut" }}
+      transition={{ duration: 0.3, ease: "easeOut" as const }}
     >
       {/* Subtle top gradient overlay for glass reflection */}
       <div

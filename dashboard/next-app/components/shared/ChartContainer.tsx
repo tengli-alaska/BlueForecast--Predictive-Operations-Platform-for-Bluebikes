@@ -20,7 +20,7 @@ export default function ChartContainer({
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       whileInView={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
+      transition={{ duration: 0.4, ease: "easeOut" as const }}
       viewport={{ once: true }}
       className={`rounded-2xl border border-[var(--border)] bg-bg-card p-5 transition-colors duration-200 ${className}`}
     >

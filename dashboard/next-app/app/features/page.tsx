@@ -88,7 +88,7 @@ export default function FeaturesPage() {
   const totalShap = Object.values(catTotals).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="p-5 md:p-7 space-y-5 max-w-4xl">
+    <div className="p-5 md:p-7 space-y-5">
 
       {/* Header */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2">
@@ -132,7 +132,7 @@ export default function FeaturesPage() {
                       style={{ backgroundColor: meta?.color ?? "#94a3b8" }}
                       initial={{ width: 0 }}
                       animate={{ width: `${pct}%` }}
-                      transition={{ duration: 0.6, ease: "easeOut" }} />
+                      transition={{ duration: 0.6, ease: "easeOut" as const }} />
                   </div>
                   <span className="text-[11px] text-slate-400 tabular-nums w-8 text-right">{pct}%</span>
                 </div>
@@ -182,7 +182,7 @@ export default function FeaturesPage() {
                     style={{ backgroundColor: meta?.color ?? "#94a3b8", opacity: 0.75 }}
                     initial={{ width: 0 }}
                     animate={{ width: `${pct}%` }}
-                    transition={{ duration: 0.5, delay: i * 0.03, ease: "easeOut" }} />
+                    transition={{ duration: 0.5, delay: i * 0.03, ease: "easeOut" as const }} />
                 </div>
 
                 {/* Value */}

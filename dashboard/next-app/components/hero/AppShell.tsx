@@ -40,7 +40,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           className="flex h-full min-h-screen bg-bg-primary"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
+          transition={{ duration: 0.6, ease: "easeOut" as const }}
         >
           <Sidebar />
           <div className="ml-56 flex flex-1 flex-col overflow-y-auto">

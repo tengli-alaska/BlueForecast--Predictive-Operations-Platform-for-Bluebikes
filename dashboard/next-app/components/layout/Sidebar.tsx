@@ -121,10 +121,7 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="px-4 py-3 border-t border-[var(--border)]">
-        <div className="flex items-center gap-1.5">
-          <span className="h-[5px] w-[5px] rounded-full bg-accent-green" />
-          <span className="text-[11px] text-text-secondary">All systems normal</span>
-        </div>
+        <p className="text-[10px] text-slate-600">BlueForecast · Group 20</p>
       </div>
     </aside>
   );
