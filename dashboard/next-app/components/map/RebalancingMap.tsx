@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import "leaflet/dist/leaflet.css";
 
 import L from "leaflet";
@@ -26,9 +27,12 @@ const RISK_COLORS: Record<string, string> = {
 };
 
 const ROUTE_COLORS: Record<string, string> = {
-  "route-alpha": "#60a5fa",
-  "route-beta": "#4ade80",
-  "route-gamma": "#c084fc",
+  "route-alpha":  "#60a5fa",
+  "route-beta":   "#4ade80",
+  "route-gamma":  "#c084fc",
+  "RB-URGENT-001": "#60a5fa",  // Truck Alpha — blue
+  "RB-ACTIVE-002": "#4ade80",  // Truck Beta  — green
+  "RB-PLANNED-003": "#c084fc", // Truck Gamma — purple
 };
 
 function clampRadius(capacity: number): number {
@@ -107,40 +111,58 @@ function AnimatedTruck({ route, color }: { route: RebalancingRoute; color: strin
 
 function Legend() {
   return (
-    <div
-      style={{
-        position: "absolute",
-        bottom: 16,
-        right: 16,
-        zIndex: 1000,
-        backgroundColor: "rgba(10, 14, 23, 0.9)",
-        backdropFilter: "blur(8px)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: "10px",
-        padding: "10px 14px",
-        color: "#94a3b8",
-        fontSize: "11px",
-        lineHeight: 1.9,
-      }}
-    >
-      <div style={{ fontWeight: 600, fontSize: 10, letterSpacing: "0.08em", color: "#64748b", marginBottom: 2 }}>STATIONS</div>
-      {(["critical", "low", "moderate", "surplus"] as const).map((level) => (
+    <div style={{
+      position: "absolute", bottom: 16, right: 16, zIndex: 1000,
+      backgroundColor: "rgba(10,14,23,0.92)", backdropFilter: "blur(8px)",
+      border: "1px solid rgba(255,255,255,0.06)", borderRadius: "10px",
+      padding: "10px 14px", color: "#94a3b8", fontSize: "11px", lineHeight: 1.9,
+    }}>
+      <div style={{ fontWeight: 700, fontSize: 9, letterSpacing: "0.08em", color: "#475569", marginBottom: 4, textTransform: "uppercase" }}>Station fill</div>
+      {(["critical","low","moderate","surplus"] as const).map((level) => (
         <div key={level} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: RISK_COLORS[level] }} />
-          <span style={{ textTransform: "capitalize" }}>{level}</span>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: RISK_COLORS[level], flexShrink: 0 }} />
+          <span style={{ textTransform: "capitalize", fontSize: 10 }}>{level}</span>
         </div>
       ))}
-      <div style={{ fontWeight: 600, fontSize: 10, letterSpacing: "0.08em", color: "#64748b", marginTop: 8, marginBottom: 2 }}>TRUCKS</div>
+      <div style={{ fontWeight: 700, fontSize: 9, letterSpacing: "0.08em", color: "#475569", marginTop: 10, marginBottom: 4, textTransform: "uppercase" }}>Model-suggested routes</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: "#60a5fa", display: "inline-block", border: "2px solid rgba(255,255,255,0.5)" }} />
-        <span>Active (en route)</span>
+        <span style={{ width: 16, height: 3, backgroundColor: "#60a5fa", display: "inline-block", borderRadius: 2, boxShadow: "0 0 6px #60a5fa80" }} />
+        <span style={{ fontSize: 10 }}>Priority route</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ width: 14, height: 2, backgroundColor: "#c084fc", display: "inline-block", borderRadius: 1, border: "1px dashed #c084fc" }} />
-        <span>Planned</span>
+        <span style={{ width: 16, height: 2, backgroundColor: "#4ade80", display: "inline-block", borderRadius: 2 }} />
+        <span style={{ fontSize: 10 }}>Active route</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ width: 16, height: 1, backgroundColor: "#c084fc", display: "inline-block", borderRadius: 1, borderTop: "1px dashed #c084fc" }} />
+        <span style={{ fontSize: 10 }}>Planned route</span>
+      </div>
+      <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.05)", fontSize: 9, color: "#334155", lineHeight: 1.5 }}>
+        Routes are model-generated.<br/>Review before dispatching.
       </div>
     </div>
   );
+}
+
+/** Priority route = the active route whose stops include the most critical stations
+ *  (lowest fill%). Derived purely from station status data — no truck tracking needed. */
+function getPriorityRouteId(routes: RebalancingRoute[], stations: StationStatus[]): string | null {
+  const criticalIds = new Set(
+    stations.filter(s => s.risk_level === "critical" && s.fill_pct <= 10).map(s => s.station_id)
+  );
+
+  let mostCritical = -1;
+  let priorityId: string | null = null;
+
+  for (const route of routes) {
+    if (route.status !== "active") continue;
+    const criticalCount = route.stops.filter(s => criticalIds.has(s.station_id)).length;
+    if (criticalCount > mostCritical) {
+      mostCritical = criticalCount;
+      priorityId = route.route_id;
+    }
+  }
+  return priorityId;
 }
 
 export default function RebalancingMap({
@@ -149,6 +171,7 @@ export default function RebalancingMap({
   stationNames,
   height = "520px",
 }: RebalancingMapProps) {
+  const priorityRouteId = getPriorityRouteId(routes, stations);
   return (
     <div style={{ position: "relative", width: "100%", height }}>
       <MapContainer
@@ -195,24 +218,34 @@ export default function RebalancingMap({
           );
         })}
 
-        {/* Route polylines */}
+        {/* Route polylines — priority route gets glow treatment */}
         {routes.map((route) => {
-          const color = ROUTE_COLORS[route.route_id] || "#94a3b8";
+          const color     = ROUTE_COLORS[route.route_id] || "#94a3b8";
+          const isPriority = route.route_id === priorityRouteId;
+          const isPlanned  = route.status === "planned";
           const positions: [number, number][] = [...route.stops]
             .sort((a, b) => a.order - b.order)
             .map((stop) => [stop.lat, stop.lon]);
 
           return (
-            <Polyline
-              key={route.route_id}
-              positions={positions}
-              pathOptions={{
-                color,
-                weight: route.status === "active" ? 3 : 2,
-                opacity: route.status === "active" ? 0.7 : 0.35,
-                dashArray: route.status === "planned" ? "6 8" : undefined,
-              }}
-            />
+            <React.Fragment key={route.route_id}>
+              {/* Glow layer for priority route */}
+              {isPriority && (
+                <Polyline
+                  positions={positions}
+                  pathOptions={{ color, weight: 14, opacity: 0.12, dashArray: undefined }}
+                />
+              )}
+              <Polyline
+                positions={positions}
+                pathOptions={{
+                  color,
+                  weight: isPriority ? 5 : isPlanned ? 1.5 : 2.5,
+                  opacity: isPriority ? 0.9 : isPlanned ? 0.3 : 0.6,
+                  dashArray: isPlanned ? "6 8" : undefined,
+                }}
+              />
+            </React.Fragment>
           );
         })}
 

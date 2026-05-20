@@ -22,8 +22,8 @@ import {
 const opsNav = [
   { label: "Overview", href: "/overview", icon: LayoutDashboard },
   { label: "Rebalancing", href: "/rebalancing", icon: Truck },
-  { label: "Stations", href: "/stations", icon: MapPin },
-  { label: "Forecasts", href: "/forecasts", icon: TrendingUp },
+  { label: "Forecasts",   href: "/forecasts",   icon: TrendingUp },
+  { label: "Stations",    href: "/stations",    icon: MapPin },
 ];
 
 const adminNav = [
